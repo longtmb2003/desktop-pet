@@ -47,5 +47,7 @@ class Settings:
     chatter = _prop("chatter", True)                    # now and then say something unprompted
     speed = _prop("speed", 1.0, 0.3, 3.0)               # walking speed multiplier
     activity = _prop("activity", 1.0, 0.3, 3.0)         # how often it picks something to do (higher = fidgets more)
+    scale = _prop("scale", 1.0, 0.6, 2.0)             # pet size multiplier
+    pet = _prop("pet", "mochi")                       # which character (an id from pets.available())
     focus_min = _prop("focus_min", 25, 1, 180)          # Pomodoro focus length
     break_min = _prop("break_min", 5, 1, 60)            # Pomodoro break length

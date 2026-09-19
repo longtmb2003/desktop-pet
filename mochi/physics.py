@@ -43,14 +43,15 @@ def covered(wins, i, x, y):
     return False
 
 
-def surface(wins, support, cx, feet, b):
-    """(window-y of the surface under the feet, id of the window it is or None for the screen floor)"""
+def surface(wins, support, cx, feet, b, feet_y=FEET, head=HEAD):
+    """(window-y of the surface under the feet, id of the window it is or None for the screen floor). `feet_y` is the pet's floor
+    line inside its window, `head` how far below the screen top a surface must be for the pet to fit above it."""
     best, wid = b.bottom + 1, None
     for i, (x, y, w, _h) in wins.items():
-        if w >= MIN_W and x + 24 <= cx <= x + w - 24 and y >= b.top + HEAD and y < best and (y >= feet - 6 or i == support) \
+        if w >= MIN_W and x + 24 <= cx <= x + w - 24 and y >= b.top + head and y < best and (y >= feet - 6 or i == support) \
                 and not covered(wins, i, cx, y + 1):
             best, wid = y, i
-    return best - FEET, wid
+    return best - feet_y, wid
 
 
 def span(wins, b, wid):
@@ -62,11 +63,11 @@ def span(wins, b, wid):
     return lo, hi
 
 
-def hop_target(wins, cx, feet, b):
+def hop_target(wins, cx, feet, b, head=HEAD):
     """(vx, vy, facing or None) for a jump from the floor onto a nearby, uncovered window top; None if there is none"""
     for i, (x, y, w, _h) in wins.items():
         up = feet - y                                          # how high the top is above our feet
-        if w >= MIN_W and 20 < up < 200 and y >= b.top + HEAD and x - 120 < cx < x + w + 120:
+        if w >= MIN_W and 20 < up < 200 and y >= b.top + head and x - 120 < cx < x + w + 120:
             tx = max(x + 40, min(x + w - 40, cx))              # aim for a spot on top, then solve the arc
             if covered(wins, i, tx, y + 1): continue           # that spot is under another window
             vy = -math.sqrt(2 * GRAVITY * (up + 40))
@@ -114,16 +115,16 @@ class Flight(NamedTuple):
     impact: float       # normal speed (px/s) of the hardest hit this frame, 0 if none
 
 
-def step_air(x, y, vx, vy, dt, floor, b):
+def step_air(x, y, vx, vy, dt, floor, b, size=S, top=HEAD_ROOM):
     """One frame of flight for the pet window at (x, y): gravity, bouncing off the screen edges and ceiling, and off the
     surface whose window-y is `floor`. Bounces lose energy, and a floor bounce below REST_VY becomes a landing, so it always settles."""
     vy = min(vy + GRAVITY * dt, max(vy, TERMINAL))
     x, y = x + vx * dt, y + vy * dt
     impact, hit = 0.0, False
-    lo, hi = b.left - WALL_PAD, b.right - S + WALL_PAD
+    lo, hi = b.left - WALL_PAD, b.right - size + WALL_PAD
     if x < lo and vx < 0 or x > hi and vx > 0:
         x, impact, hit, vx = (lo if x < lo else hi), abs(vx), True, -vx * BOUNCE_X
-    ceiling = b.top - HEAD_ROOM
+    ceiling = b.top - top
     if y < ceiling and vy < 0:
         y, impact, hit, vy = ceiling, max(impact, -vy), True, -vy * BOUNCE_Y
     if y >= floor and vy > 0:

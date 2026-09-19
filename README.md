@@ -59,6 +59,30 @@ Chuột phải → **Cài đặt...** mở cửa sổ chỉnh: màu, tốc độ
 
 Theo dõi CPU cần `psutil` (bản build sẵn có kèm; chạy từ mã nguồn thì `pip install psutil` hoặc `pip install ".[monitor]"`). Không có psutil thì mọi thứ khác vẫn chạy bình thường.
 
+## Nhân vật (pet) và gói nhân vật
+
+Ngoài Mochi (vẽ bằng code), Mochi có thể hoá thân thành nhân vật khác: chuột phải → **Nhân vật**, hoặc trong Cài đặt. Liệt kê những gì có: `mochi pets`. Cỡ pet chỉnh trong Cài đặt (60% đến 200%).
+
+Mỗi nhân vật là **dữ liệu**, không phải code: kích thước, tốc độ, hành vi hay làm (trọng số), câu hay nói, tiếng kêu khi mất chỗ đứng, cách vẽ. Nhân vật dạng ảnh ("sprite") là một thư mục có `pack.json` cùng vài file PNG, đặt trong `~/.local/share/mochi-pet/pets/<tên>/`:
+
+```
+pack.json        khai báo (xem bên dưới)
+body.png         cả người, nền trong suốt, mép dưới chạm sàn, mặt để trống
+faces/*.png      các khuôn mặt vẽ đè lên (nét mực trên nền trong suốt): neutral (bắt buộc), talk, laugh
+```
+
+```json
+{"id": "hanhan", "name": "Hà Nhân", "size": 240, "feet": 232, "height": 200, "walk_speed": 42,
+ "body": "body.png", "face": {"box": [69, 162, 198, 172]},
+ "faces": {"neutral": ["faces/neutral_00.png"], "talk": ["faces/talk_00.png", "faces/talk_01.png"], "laugh": ["faces/laugh_00.png"]},
+ "fps": {"talk": 12}, "behaviors": {"idle": 4, "walk": 4, "sleep": 1, "chase": 1, "rant": 2},
+ "chatter": ["Làm việc đi!"], "scream": "Trời ơi!", "sway": 4, "bob": 5}
+```
+
+Mochi chỉ đọc gói, không chạy code trong đó. Gói sai (thiếu ảnh, số lạ, đường dẫn chui ra ngoài thư mục) bị bỏ qua kèm cảnh báo, không làm Mochi hỏng. Ảnh chỉ được chuyển động bằng phép biến đổi (nhún, nghiêng, lộn, nằm xuống) và đổi mặt; biểu cảm ngủ và chóng mặt do Mochi tự vẽ lên khuôn mặt.
+
+`scripts/make_hanhan.py` là ví dụ dựng một gói từ hai ảnh nguồn (cắt nền, xoá mặt gốc, biến bảng biểu cảm thành lớp mặt trong suốt). Các ảnh nguồn của Hà Nhân không nằm trong repo này (không rõ giấy phép), nên gói `hanhan` chỉ có trên máy đã chạy script đó.
+
 ## API DBus cho chương trình khác
 
 Mochi lắng nghe trên session bus, dịch vụ `org.mochi.Pet`, đường dẫn `/pet`, giao diện `org.mochi.Pet`:
@@ -114,6 +138,8 @@ Test chạy không cần màn hình (`QT_QPA_PLATFORM=offscreen`). CI (GitHub Ac
 mochi/
 ├── app.py        điểm vào, dòng lệnh (`mochi autostart …`)
 ├── pet.py        widget: hành vi, vòng lặp vật lý theo thời gian thực, chuột, menu
+├── pets/         định nghĩa nhân vật (dữ liệu) và bộ đọc gói ảnh (pack.py)
+├── sprite.py     vẽ nhân vật dạng ảnh: chuyển động bằng phép biến đổi, vùng click
 ├── state.py      Motion × Expression × Action, thời lượng, quy tắc chuyển trạng thái (kể cả theo giờ)
 ├── physics.py    hình học thuần (bề mặt, cửa sổ bị che, nhảy), ném/nảy, phát hiện lắc; không phụ thuộc Qt
 ├── bubble.py     bong bóng thoại: cửa sổ riêng, hàng đợi, chọn vị trí
@@ -153,8 +179,8 @@ Build lại icon / ảnh xem trước: `python scripts/make_icon.py`, `python sc
 
 - **v0.2:** ổn định, tách kiến trúc, đóng gói. (xong)
 - **v0.3:** ném pet bằng chuột (quán tính), va chạm cạnh màn hình, chóng mặt, lắc, double-click lộn vòng, hoảng sợ khi cửa sổ biến mất, đẩy tường. (xong)
-- **v0.4 (bản này):** bong bóng thoại, Pomodoro, phản ứng theo giờ/CPU, API DBus, cửa sổ Cài đặt và chế độ yên lặng.
-- **v0.5:** nhiều pet / linh thú với hành vi và hình dạng riêng.
+- **v0.4:** bong bóng thoại, Pomodoro, phản ứng theo giờ/CPU, API DBus, cửa sổ Cài đặt và chế độ yên lặng. (xong)
+- **v0.5 (bản này):** nhân vật là dữ liệu: đổi được giữa Mochi và các gói ảnh (như Hà Nhân), mỗi nhân vật có cỡ, tốc độ, hành vi, lời thoại riêng; chỉnh cỡ pet. Chưa có: nhiều pet chạy cùng lúc.
 
 ## License
 

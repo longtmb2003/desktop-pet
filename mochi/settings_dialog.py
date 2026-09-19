@@ -6,8 +6,8 @@ from . import autostart, monitor
 from .renderer import THEMES
 
 
-def _percent_slider(value, on_change):
-    s = QSlider(Qt.Horizontal); s.setRange(30, 300); s.setValue(round(value * 100))
+def _percent_slider(value, on_change, lo=30, hi=300):
+    s = QSlider(Qt.Horizontal); s.setRange(lo, hi); s.setValue(round(value * 100))
     label = QLabel(f"{s.value()}%")
     s.valueChanged.connect(lambda v: (label.setText(f"{v}%"), on_change(v / 100)))
     row = QHBoxLayout(); row.addWidget(s); row.addWidget(label)
@@ -22,9 +22,15 @@ class SettingsDialog(QDialog):
         lay, form = QVBoxLayout(self), QFormLayout()
         lay.addLayout(form)
 
+        self.who = QComboBox()
+        for pid, d in pet.pets.items(): self.who.addItem(d.name, pid)
+        self.who.setCurrentIndex(max(0, self.who.findData(pet.defn.id)))
+        self.who.currentIndexChanged.connect(lambda _: self.set_pet(self.who.currentData()))
+        if len(pet.pets) > 1: form.addRow("Nhân vật", self.who)
         self.theme = QComboBox(); self.theme.addItems(list(THEMES)); self.theme.setCurrentText(pet.theme)
         self.theme.currentTextChanged.connect(pet.set_theme)
-        form.addRow("Màu", self.theme)
+        self.theme_row = form.rowCount(); form.addRow("Màu (Mochi)", self.theme)
+        row, self.size = _percent_slider(self.cfg.scale, self.set_scale, 60, 200); form.addRow("Kích thước", row)
         row, self.speed = _percent_slider(self.cfg.speed, self.set_speed); form.addRow("Tốc độ đi", row)
         row, self.activity = _percent_slider(self.cfg.activity, self.set_activity); form.addRow("Tần suất hành vi", row)
 
@@ -60,6 +66,14 @@ class SettingsDialog(QDialog):
     @staticmethod
     def set_autostart(on):
         autostart.enable() if on else autostart.disable()
+
+    def set_pet(self, pid):
+        self.cfg.pet = pid
+        self.pet.apply_settings()
+
+    def set_scale(self, v):
+        self.cfg.scale = v                                        # dragging the slider resizes live
+        self.pet.apply_settings()
 
     def set_speed(self, v):
         self.cfg.speed = v
