@@ -5,7 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 VENV=.venv-build
 [ -x "$VENV/bin/python" ] || python3 -m venv "$VENV"
-"$VENV/bin/pip" install -q "PySide6-Essentials>=6.6" "pyinstaller>=6.6"   # Essentials = QtCore/Gui/Widgets/DBus, all Mochi uses
+"$VENV/bin/pip" install -q "PySide6-Essentials>=6.6" "psutil>=5.9" "pyinstaller>=6.6"   # Essentials = QtCore/Gui/Widgets/DBus, all Mochi uses
 
 "$VENV/bin/python" -m PyInstaller --noconfirm --clean --onedir --name mochi \
     --paths . \

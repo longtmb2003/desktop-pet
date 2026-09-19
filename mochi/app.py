@@ -36,7 +36,7 @@ def main():
     for sig in (signal.SIGTERM, signal.SIGINT):
         signal.signal(sig, lambda *_: app.quit())          # `kill` / Ctrl-C -> clean exit (unloads the KWin script)
     pet = Pet()
-    platform = detect(pet.set_windows)
+    platform = detect(pet.set_windows, pet)
     platform.start()
     pet.show()
     sys.exit(app.exec())

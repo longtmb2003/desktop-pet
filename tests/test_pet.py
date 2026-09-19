@@ -461,6 +461,7 @@ def test_the_scared_pet_paints_inside_its_mask_and_differs_from_a_calm_fall(pet)
     calm, _ = frame(State(Motion.AIRBORNE))
     assert scared != calm
     assert all(m.contains(QPoint(x, y)) for y in range(S) for x in range(S) if scared.pixel(x, y) >> 24 > 40)
+    assert not any(scared.pixel(x, y) >> 24 for x in range(S) for y in (S - 1,))          # pedalling legs stay inside the window
 
 
 # ---- pushing against an edge ----------------------------------------------------------------------------------
@@ -519,3 +520,236 @@ def test_the_pushing_pet_paints_inside_its_mask(pet, facing):
             for x in range(S):
                 if img.pixel(x, y) >> 24 > 40:
                     assert m.contains(QPoint(x, y)), (facing, k, x, y)
+
+
+# ---- speech bubble ---------------------------------------------------------------------------------------------
+def test_losing_the_ground_makes_the_pet_yell(pet):
+    standing_on_a_window(pet)
+    pet.set_windows({})
+    pet.tick()
+    assert pet.bubble.isVisible() and pet.bubble.lines == "Á!"
+    assert (pet.width(), pet.height()) == (S, S)                        # the bubble never enlarges the pet window
+
+
+def test_chatter_is_suppressed_by_quiet_mode_and_by_its_own_switch_but_urgent_speech_is_not(pet):
+    pet.cfg.quiet = True
+    pet.say("lảm nhảm", chatter=True); assert not pet.bubble.isVisible()
+    pet.say("Á!", urgent=True); assert pet.bubble.isVisible()          # quiet only silences unprompted talk
+    pet.bubble.dismiss()
+    pet.cfg.quiet, pet.cfg.chatter = False, False
+    pet.say("lảm nhảm", chatter=True); assert not pet.bubble.isVisible()
+    pet.cfg.chatter = True
+    pet.say("lảm nhảm", chatter=True); assert pet.bubble.isVisible()
+
+
+def test_a_fullscreen_app_means_quiet_unless_that_is_switched_off(pet):
+    assert not pet.quiet
+    pet.fullscreen = True
+    assert pet.quiet
+    pet.cfg.quiet_auto = False
+    assert not pet.quiet
+    pet.cfg.quiet = True
+    assert pet.quiet
+
+
+def test_the_bubble_follows_the_pet_and_stays_on_screen(pet):
+    pet.say("xin chào", urgent=True)
+    g = pet.screen_geo()
+    for px in (g.left - 50, g.left + 400, g.right - 20):
+        pet.px, pet.py = px, g.top + 200
+        pet.tick()
+        b = pet.bubble
+        assert g.left <= b.x() and b.x() + b.width() <= g.right + 1
+
+
+def test_a_random_remark_turns_up_now_and_then_when_idle(pet, monkeypatch):
+    pet.enter(State()); pet.next_chat = 0.0
+    monkeypatch.setattr("mochi.pet.random.choice", lambda seq: seq[0])
+    pet.tick()
+    assert pet.bubble.isVisible() and pet.next_chat > pet.t + 100       # and the next one is minutes away, not seconds
+
+
+# ---- pomodoro --------------------------------------------------------------------------------------------------
+class Clock:
+    def __init__(self): self.t = 1000.0
+    def __call__(self): return self.t
+
+
+def pomodoro_pet(pet, monkeypatch):
+    import mochi.pet as mp
+    chimes = []
+    monkeypatch.setattr(mp, "chime", lambda: chimes.append(1))
+    clock = Clock(); pet.pomo.clock = clock
+    on_the_floor(pet)
+    return clock, chimes
+
+
+def test_focus_puts_the_pet_at_its_laptop_and_keeps_it_there(pet, monkeypatch):
+    clock, _ = pomodoro_pet(pet, monkeypatch)
+    pet.start_focus(25)
+    assert pet.state == State(action=Action.WORK) and pet.pomo.focusing and pet.bubble.lines == "Tập trung nào! 25 phút"
+    for _ in range(int(40 / 0.033)):                                     # 40 s: several WORK timeouts, never wandering off
+        pet.tick()
+        assert pet.state.action is Action.WORK
+
+
+def test_pausing_or_resetting_lets_the_pet_go_back_to_normal_life(pet, monkeypatch):
+    clock, _ = pomodoro_pet(pet, monkeypatch)
+    pet.start_focus(25); pet.pomo.pause()
+    run_until(pet, lambda: pet.state.action is not Action.WORK)
+    assert not pet.pomo.focusing
+
+
+def test_the_end_of_focus_announces_chimes_and_starts_the_break(pet, monkeypatch):
+    clock, chimes = pomodoro_pet(pet, monkeypatch)
+    pet.start_focus(1)
+    pet.bubble.dismiss()
+    clock.t += 61; pet.tick()
+    assert pet.pomo.phase == "break" and "Hết giờ tập trung" in pet.bubble.lines and chimes == [1]
+    assert pet.state.expression is Expression.HAPPY
+    clock.t += 400; pet.tick()
+    assert not pet.pomo.active and chimes == [1, 1]
+    assert pet.state.action is not Action.WORK                           # no laptop during the break or afterwards
+
+
+def test_no_chime_in_quiet_mode_or_with_sound_off_but_the_bubble_still_shows(pet, monkeypatch):
+    clock, chimes = pomodoro_pet(pet, monkeypatch)
+    pet.cfg.quiet = True
+    pet.start_focus(1); pet.bubble.dismiss(); clock.t += 61; pet.tick()
+    assert chimes == [] and "Hết giờ" in pet.bubble.lines               # explicit user-requested notice is still shown
+    pet.cfg.quiet, pet.cfg.sound = False, False
+    pet.bubble.dismiss(); pet.pomo.reset(); pet.start_focus(1); clock.t += 61; pet.tick()
+    assert chimes == []
+
+
+def test_starting_focus_while_airborne_does_not_freeze_the_fall(pet, monkeypatch):
+    pomodoro_pet(pet, monkeypatch)
+    pet.enter(State(Motion.AIRBORNE)); pet.grounded = False
+    pet.start_focus(25)
+    assert pet.state == State(Motion.AIRBORNE)
+    run_until(pet, lambda: pet.state.motion is not Motion.AIRBORNE)
+    assert pet.pomo.focusing
+
+
+def test_the_laptop_pose_paints_inside_its_mask(pet):
+    from PySide6.QtCore import QPoint
+    from PySide6.QtGui import QImage, QPainter
+    pet.grounded, pet.state = True, State(action=Action.WORK)
+    for facing in (1, -1):
+        pet.facing = facing
+        for k in range(6):
+            pet.t, pet.began, pet.dur = 10 + k * 0.07, 10.0, 8.0
+            pet.mask_key = None; pet.update_mask(); m = pet.mask(); pet.clearMask()
+            img = QImage(S, S, QImage.Format_ARGB32); img.fill(0)
+            pt = QPainter(img); pet.render(pt, QPoint(0, 0)); pt.end()
+            assert all(m.contains(QPoint(x, y)) for y in range(S) for x in range(S) if img.pixel(x, y) >> 24 > 40)
+
+
+# ---- settings that change behaviour ----------------------------------------------------------------------------
+def test_time_of_day_is_read_from_the_local_clock_unless_off_or_being_handled(pet):
+    pet.now_hour = lambda: 3
+    pet.t = 1000.0
+    assert pet.hour() == 3
+    pet.last_touch = pet.t - 5                                       # just played with: never nudged to sleep
+    assert pet.hour() is None
+    pet.last_touch = -1e9; pet.cfg.time_of_day = False
+    assert pet.hour() is None
+
+
+def test_the_default_clock_is_the_local_time_zone(pet):
+    from datetime import datetime
+    assert pet.now_hour() == datetime.now().hour
+
+
+def test_speed_setting_scales_the_walk(pet):
+    def walked(speed):
+        pet.cfg.speed = speed
+        on_the_floor(pet); pet.enter(State(Motion.WALK)); pet.facing = 1
+        g = pet.screen_geo(); pet.px = g.left + 400; x0 = pet.px
+        for _ in range(10): pet.tick()
+        return pet.px - x0
+    slow, fast = walked(1.0), walked(2.0)
+    assert fast == pytest.approx(2 * slow, rel=0.05)
+
+
+def test_chase_switch_reaches_the_behaviour_picker(pet, monkeypatch):
+    seen = {}
+    import mochi.pet as mp
+    monkeypatch.setattr(mp, "after", lambda s, **kw: seen.update(kw) or State())
+    pet.cfg.chase = False
+    on_the_floor(pet); pet.enter(State()); pet.until = 0.0; pet.tick()
+    assert seen["chase"] is False and "hour" in seen
+
+
+# ---- cpu monitor and frame rate --------------------------------------------------------------------------------
+def test_a_busy_cpu_makes_the_pet_hot_with_hysteresis_and_one_remark(pet):
+    readings = iter([50, 85, 90, 70, 60])
+    pet.read_cpu = lambda: next(readings)
+    seen = []
+    for _ in range(5):
+        pet.poll_cpu(); seen.append(pet.hot)
+        if pet.hot: pet.bubble.dismiss()
+    assert seen == [False, True, True, True, False]                      # 70% is inside the dead band: still hot
+    pet.hot = False; pet.bubble.dismiss()
+    pet.read_cpu = lambda: 95
+    pet.poll_cpu(); assert pet.bubble.lines == "Máy nóng quá..."
+
+
+def test_no_remark_when_quiet_and_a_missing_psutil_changes_nothing(pet):
+    pet.cfg.quiet = True
+    pet.read_cpu = lambda: 99
+    pet.poll_cpu(); assert pet.hot and not pet.bubble.isVisible()
+    pet.hot = False; pet.read_cpu = lambda: None                         # psutil not installed
+    pet.poll_cpu(); assert not pet.hot
+
+
+def test_the_monitor_timer_follows_the_setting_and_availability(pet, monkeypatch):
+    import mochi.pet as mp
+    monkeypatch.setattr(mp.monitor, "AVAILABLE", True)
+    pet.read_cpu = lambda: 0.0
+    pet.cfg.monitor = True; pet.sync_monitor(); assert pet.mon_timer.isActive() and pet.mon_timer.interval() == 8000
+    pet.hot = True
+    pet.cfg.monitor = False; pet.sync_monitor(); assert not pet.mon_timer.isActive() and not pet.hot
+    monkeypatch.setattr(mp.monitor, "AVAILABLE", False)
+    pet.cfg.monitor = True; pet.sync_monitor(); assert not pet.mon_timer.isActive()
+
+
+def test_frame_rate_drops_only_when_resting_and_never_during_physics(pet):
+    def fps_ms(state, **kw):
+        for k, v in kw.items(): setattr(pet, k, v)
+        pet.state = state; pet.retune(); return pet.timer.interval()
+    assert fps_ms(State(), grounded=True, hot=False) == 33
+    assert fps_ms(State(Motion.SLEEP)) == 50                             # asleep: 20 fps is plenty for the zzz
+    assert fps_ms(State(), hot=True) == 50                               # resting on a busy CPU
+    assert fps_ms(State(Motion.AIRBORNE), grounded=False) == 33          # falling: full rate, or the steps get coarse
+    assert fps_ms(State(Motion.DRAG)) == 33
+    assert fps_ms(State(action=Action.FLIP), grounded=True) == 33        # a one-shot animation
+    pet.hot = False; pet.cfg.quiet = True
+    assert fps_ms(State(Motion.WALK), grounded=True) == 50               # quiet mode also rests it
+    pet.cfg.quiet = False
+    assert fps_ms(State(Motion.WALK), grounded=True) == 33
+
+
+def test_a_hot_pet_walks_slower(pet):
+    def walked(hot):
+        pet.hot = hot
+        on_the_floor(pet); pet.enter(State(Motion.WALK)); pet.facing = 1
+        g = pet.screen_geo(); pet.px = g.left + 400; x0 = pet.px
+        for _ in range(10): pet.tick()
+        return pet.px - x0
+    assert walked(True) == pytest.approx(0.6 * walked(False), rel=0.05)
+
+
+def test_the_tired_pet_paints_inside_its_mask_and_looks_different(pet):
+    from PySide6.QtCore import QPoint
+    from PySide6.QtGui import QImage, QPainter
+
+    def frame(hot):
+        pet.hot, pet.grounded, pet.state, pet.t = hot, True, State(), 10.4
+        pet.mask_key = None; pet.update_mask(); m = pet.mask(); pet.clearMask()
+        img = QImage(S, S, QImage.Format_ARGB32); img.fill(0)
+        pt = QPainter(img); pet.render(pt, QPoint(0, 0)); pt.end()
+        return img, m
+    tired, m = frame(True)
+    assert tired != frame(False)[0]
+    assert all(m.contains(QPoint(x, y)) for y in range(S) for x in range(S) if tired.pixel(x, y) >> 24 > 40)

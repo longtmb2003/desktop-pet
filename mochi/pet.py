@@ -2,19 +2,26 @@
 import math
 import random
 import time
+from datetime import datetime
 
 from PySide6.QtCore import QElapsedTimer, QPoint, Qt, QTimer
 from PySide6.QtGui import QCursor, QGuiApplication, QPainter
 from PySide6.QtWidgets import QApplication, QMenu, QWidget
 
-from . import autostart, physics
+from . import autostart, monitor, physics
+from .bubble import SpeechBubble
+from .pomodoro import Pomodoro
 from .physics import FEET, IMPACT_DIZZY, S, THROW_MIN, WALK_SPEED, Bounds, DragTracker
 from .renderer import THEMES, paint, silhouette
 from .settings import Settings
+from .settings_dialog import SettingsDialog
+from .sound import chime
 from .state import Action, Expression, Motion, State, after, ends_at
 
 PUSH_CHANCE = 0.5                  # of the edge encounters that aren't a hop off, how many are a push against the "wall"
 CLICK_DELAY_MS = 250                # a click waits this long for a second click before it counts as a pet
+CHATTER = ("Meo~", "Bạn uống nước chưa?", "Nghỉ mắt một chút nhé!", "Mochi ở đây nè", "Nhớ lưu file nha", "Vươn vai một cái đi!")
+LOW_FPS_MS = 50                     # frame interval (ms) when asleep, or resting in Quiet Mode / on a busy CPU
 MAX_DT = 0.05                       # cap one frame's time step so a stall can't launch the pet through a window
 
 
@@ -35,9 +42,15 @@ class Pet(QWidget):
         self.px, self.py = random.uniform(g.left + 80, g.right - 240), g.top - 100
         self.enter(State(Motion.AIRBORNE))
         self.clock = QElapsedTimer(); self.clock.start()   # real frame time, see tick()
+        self.pomo, self.hot, self.cpu, self.read_cpu = Pomodoro(), False, monitor.Hysteresis(), monitor.cpu_percent
+        self.mon_timer = QTimer(self, interval=monitor.POLL_MS, timeout=self.poll_cpu)
+        self.last_touch, self.now_hour = -1e9, lambda: datetime.now().hour      # local time zone; tests replace now_hour
+        self.bubble, self.fullscreen = SpeechBubble(), False    # fullscreen: pushed by the platform (kwin.js)
+        self.next_chat = random.uniform(60, 180)
         self.click_timer = QTimer(self, singleShot=True, interval=CLICK_DELAY_MS, timeout=self.pet_it)
         self.timer = QTimer(self, interval=33, timeout=self.tick)
         self.timer.start()
+        self.sync_monitor()
         QGuiApplication.instance().screenRemoved.connect(lambda _: QTimer.singleShot(0, self.ensure_visible))
 
     def set_windows(self, wins):
@@ -46,7 +59,7 @@ class Pet(QWidget):
     # ---- behaviour -------------------------------------------------------
     def enter(self, state):
         self.state = state
-        self.until = ends_at(state, self.t)
+        self.until = ends_at(state, self.t, activity=self.cfg.activity)
         self.began, self.dur = self.t, max(min(self.until - self.t, 1e9), 1e-3)   # for one-shot animations
         if state.motion is Motion.WALK and state.action is Action.NONE:
             self.facing = random.choice((-1, 1))
@@ -76,6 +89,7 @@ class Pet(QWidget):
                 if self.support is not None and self.support not in self.wins and self.state.motion is not Motion.AIRBORNE:
                     self.support, self.vx, self.vy = None, 0.0, 0.0                 # the ground vanished under its feet
                     self.enter(State(Motion.AIRBORNE, Expression.SCARED))
+                    self.say("Á!", urgent=True)
                 f = physics.step_air(self.px, self.py, self.vx, self.vy, dt, floor, g)
                 self.px, self.py, self.vx, self.vy = f.x, f.y, f.vx, f.vy
                 if f.hit: self.squash = 0.3
@@ -97,11 +111,87 @@ class Pet(QWidget):
                         self.walk(dt, g, cx, wid)                           # (a PUSH stands still)
             if self.t > self.until:
                 edge = self.facing if self.state.action is Action.PUSH else 0
-                self.enter(after(self.state))
+                nxt = after(self.state, hour=self.hour(), chase=self.cfg.chase)
+                self.enter(State(action=Action.WORK) if self.pomo.focusing and self.grounded else nxt)   # focus: back to the laptop
                 if edge: self.facing = -edge                                # after shoving the edge, never walk straight back into it
             self.move(int(self.px), int(self.py))
+        if self.pomo.active: self.pomodoro_event(self.pomo.poll())
+        if self.t > self.next_chat:
+            self.next_chat = self.t + random.uniform(120, 300)
+            if self.state.motion in (Motion.IDLE, Motion.WALK): self.say(random.choice(CHATTER), chatter=True)
+        self.retune()
+        if self.bubble.isVisible(): self.bubble.follow(self.px, self.py, self.screen_geo())
         self.update_mask()
         self.update()
+
+    def hour(self):
+        """local hour for time-of-day habits, or None when they don't apply: switched off, or the user is playing with the pet
+        (it is never nudged to sleep while being handled)"""
+        return self.now_hour() if self.cfg.time_of_day and self.t - self.last_touch > 60 else None
+
+    def apply_settings(self):
+        """a setting changed: bring the running pet in line (CPU watching, frame rate)"""
+        self.sync_monitor()
+        self.retune()
+
+    def open_settings(self):
+        if getattr(self, "dialog", None) is None: self.dialog = SettingsDialog(self)
+        self.dialog.show(); self.dialog.raise_(); self.dialog.activateWindow()
+
+    def sync_monitor(self):
+        """start or stop CPU watching to match the setting (and whether psutil is there at all)"""
+        if self.cfg.monitor and monitor.AVAILABLE:
+            if not self.mon_timer.isActive(): self.read_cpu(); self.mon_timer.start()     # the first reading only primes the counter
+        else:
+            self.mon_timer.stop(); self.cpu.on = self.hot = False
+
+    def poll_cpu(self):
+        v = self.read_cpu()
+        if v is None: return
+        was, self.hot = self.hot, self.cpu.update(v)
+        if self.hot and not was: self.say("Máy nóng quá...", chatter=True)
+
+    def retune(self):
+        """frame rate: full speed by default, 20 fps while asleep, or resting when quiet or the CPU is busy; never while it moves
+        under physics (airborne, dragged, mid-action), where bigger steps would show"""
+        resting = self.grounded and self.state.motion in (Motion.IDLE, Motion.WALK) and self.state.action is Action.NONE
+        ms = LOW_FPS_MS if self.state.motion is Motion.SLEEP or resting and (self.hot or self.quiet) else 33
+        if self.timer.interval() != ms: self.timer.setInterval(ms)
+
+    def start_focus(self, minutes=None):
+        """begin a Pomodoro: `minutes` of focus (default from Settings), then a break"""
+        self.pomo.start((minutes or self.cfg.focus_min) * 60, self.cfg.break_min * 60)
+        self.say(f"Tập trung nào! {minutes or self.cfg.focus_min} phút", urgent=True)
+        if self.grounded and self.state.motion in (Motion.IDLE, Motion.WALK, Motion.SLEEP): self.enter(State(action=Action.WORK))
+
+    def celebrate(self):
+        """a happy little hop (and a chime, unless quiet or muted); for good news from outside"""
+        if self.grounded and self.state.motion in (Motion.IDLE, Motion.WALK, Motion.SLEEP):
+            self.enter(State(expression=Expression.HAPPY)); self.vy = -420
+        if self.cfg.sound and not self.quiet: chime()
+
+    def pomodoro_event(self, ev):
+        if ev is None: return
+        msg = {"focus_done": f"Hết giờ tập trung! Nghỉ {self.cfg.break_min} phút nhé", "break_done": "Hết giờ nghỉ, làm tiếp nào?"}[ev]
+        self.say(msg, urgent=True)
+        if self.cfg.sound and not self.quiet: chime()
+        if ev == "focus_done" and self.grounded and self.state.motion in (Motion.IDLE, Motion.WALK):
+            self.enter(State(expression=Expression.HAPPY))
+
+    @property
+    def quiet(self):
+        """Quiet Mode: switched on by the user, or automatically while a fullscreen app is up (if allowed)"""
+        return self.cfg.quiet or (self.cfg.quiet_auto and self.fullscreen)
+
+    def say(self, text, urgent=False, chatter=False):
+        """show a speech bubble; unprompted chatter is suppressed in Quiet Mode or when switched off"""
+        if chatter and (self.quiet or not self.cfg.chatter): return
+        self.bubble.say(text, urgent)
+
+    def closeEvent(self, e):
+        self.bubble.close()
+        if getattr(self, "dialog", None) is not None: self.dialog.close()
+        super().closeEvent(e)
 
     def throw(self, vx, vy):
         """let go of the pet: a fast enough mouse movement carries over as velocity, otherwise it just drops"""
@@ -122,11 +212,11 @@ class Pet(QWidget):
             self.enter(State(expression=Expression.HAPPY))         # caught it!
             return
         self.facing = 1 if dx > 0 else -1
-        self.px += self.facing * 2 * WALK_SPEED * dt
+        self.px += self.facing * 2 * WALK_SPEED * self.cfg.speed * dt
 
     def walk(self, dt, g, cx, wid):
         dizzy = self.state.expression is Expression.DIZZY
-        step = self.facing * WALK_SPEED * dt
+        step = self.facing * WALK_SPEED * self.cfg.speed * (0.6 if self.hot else 1) * dt      # too hot to hurry
         if dizzy:                                                                # half speed, swaying, changing its mind
             step = step / 2 + math.sin(self.t * 7) * 40 * dt
             if random.random() < 0.02: self.facing = -self.facing
@@ -168,6 +258,7 @@ class Pet(QWidget):
         self.press, self.moved, self.off = g, False, g - self.pos()
         self.drag.reset(); self.drag.add(time.monotonic(), g.x(), g.y())
         self.shaken = False
+        self.last_touch = self.t
 
     def mouseMoveEvent(self, e):
         if self.press is None: return
@@ -214,6 +305,15 @@ class Pet(QWidget):
             a = colors.addAction(name)
             a.setCheckable(True); a.setChecked(name == self.theme)
             a.triggered.connect(lambda _, n=name: self.set_theme(n))
+        pm = m.addMenu("Pomodoro")
+        pm.addAction(self.pomo.label()).setEnabled(False)
+        if not self.pomo.active: pm.addAction(f"Bắt đầu ({self.cfg.focus_min} phút)", self.start_focus)
+        elif self.pomo.paused: pm.addAction("Tiếp tục", self.pomo.resume)
+        else: pm.addAction("Tạm dừng", self.pomo.pause)
+        if self.pomo.active: pm.addAction("Đặt lại", self.pomo.reset)
+        a = m.addAction("Chế độ yên lặng"); a.setCheckable(True); a.setChecked(self.cfg.quiet)
+        a.toggled.connect(lambda on: (setattr(self.cfg, "quiet", on), self.apply_settings()))
+        m.addAction("Cài đặt...", self.open_settings)
         m.addAction("Ngủ", lambda: self.enter(State(Motion.SLEEP)))
         m.addAction("Gọi về", self.bring_back)
         a = m.addAction("Tạm dừng"); a.setCheckable(True); a.setChecked(self.paused); a.toggled.connect(self.set_paused)
