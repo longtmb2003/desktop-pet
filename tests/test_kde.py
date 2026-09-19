@@ -44,3 +44,12 @@ def test_bus_never_raises_on_hostile_json(payload):
     got = []
     Bus(got.append).windows(payload)                          # deep nesting can raise RecursionError on older Pythons
     assert all(isinstance(w, dict) for w in got)
+
+
+def test_fullscreen_flag_reaches_the_pet_and_a_bus_without_a_pet_ignores_it():
+    class P: fullscreen = False
+    pet = P()
+    bus = Bus(lambda w: None, pet)
+    bus.fullscreen(True); assert pet.fullscreen is True
+    bus.fullscreen(False); assert pet.fullscreen is False
+    Bus(lambda w: None).fullscreen(True)                                # no pet yet: harmless

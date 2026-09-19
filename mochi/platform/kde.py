@@ -46,6 +46,10 @@ class Bus(Api):
         super().__init__(pet)
         self.on_windows, self.last_warn, self.dropped = on_windows, -WARN_EVERY, 0
 
+    @Slot(bool)
+    def fullscreen(self, on):
+        if self.pet is not None: self.pet.fullscreen = bool(on)        # only ever a flag: Quiet Mode may follow it, nothing else
+
     @Slot(str)
     def windows(self, js):
         try:
