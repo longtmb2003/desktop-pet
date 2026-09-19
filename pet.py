@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Mochi: a tiny vector desktop pet. Left-drag to pick up, click to pet, right-click for menu."""
 import os, sys, math, random, json, signal, logging
-os.environ.setdefault("QT_QPA_PLATFORM", "xcb")  # Wayland forbids self-positioning; XWayland allows it
+if os.environ.get("WAYLAND_DISPLAY"):
+    os.environ.setdefault("QT_QPA_PLATFORM", "xcb")  # Wayland forbids self-positioning; XWayland allows it
 from PySide6.QtCore import Qt, QTimer, QPointF, QRectF, QPoint, QObject, Slot, ClassInfo, QSettings, QElapsedTimer
 from PySide6.QtDBus import QDBusConnection, QDBusInterface, QDBusMessage
 from PySide6.QtGui import (QPainter, QColor, QPen, QBrush, QPainterPath, QGuiApplication,
@@ -225,8 +226,8 @@ class Pet(QWidget):
 
     def update_mask(self):
         # clip the window to the pet's silhouette so clicks pass through the transparent rest
-        c, f, sleep = S // 2, -self.facing, self.state == "sleep"
-        key = (f, sleep, tuple((int(x), int(y)) for x, y, _ in self.hearts))
+        c, f, sleep, stretch = S // 2, -self.facing, self.state == "sleep", self.state == "stretch"
+        key = (f, sleep, stretch, tuple((int(x), int(y)) for x, y, _ in self.hearts))
         if key == self.mask_key: return
         self.mask_key = key
         r = QRegion(c - 72, FEET - 88, 144, 100, QRegion.Ellipse)                   # body
@@ -234,6 +235,7 @@ class Pet(QWidget):
         r += QRegion(c - 60, FEET - 14, 120, 28)                                    # feet + shadow
         r += QRegion(min(c + f * 30, c + f * 100), FEET - 92, 70, 96)               # tail
         if sleep: r += QRegion(c + 28, FEET - 124, 48, 44)                         # zzz
+        if stretch: r += r.translated(-f * 10, 0) + r.translated(0, -8)            # the pose leans forward and lifts its bum
         for x, y, _ in self.hearts: r += QRegion(int(c + x - 10), int(FEET + y - 10), 20, 20)
         self.setMask(r)
 
@@ -273,8 +275,15 @@ class Pet(QWidget):
             a.setCheckable(True); a.setChecked(name == self.theme)
             a.triggered.connect(lambda _, n=name: self.set_theme(n))
         m.addAction("Ngủ", lambda: self.set_state("sleep"))
+        m.addAction("Gọi về", self.bring_back)
         m.addAction("Thoát", QApplication.quit)
         m.exec(e.globalPos())
+
+    def bring_back(self):
+        """drop the pet in from the top of the primary screen (e.g. it got lost off-screen)"""
+        g = QGuiApplication.primaryScreen().availableGeometry()
+        self.px, self.py, self.vy, self.vx, self.support = g.center().x() - S / 2, g.top() - 100, 0.0, 0.0, None
+        self.set_state("fall")
 
     def set_theme(self, name):
         self.theme = name
