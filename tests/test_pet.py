@@ -69,3 +69,24 @@ def test_mask_is_only_rebuilt_when_the_shape_changes(pet):
     pet.facing = -pet.facing
     pet.update_mask()
     assert pet.mask_key != key
+
+
+def test_ensure_visible_rescues_a_pet_stranded_off_every_screen(pet):
+    pet.px, pet.py, pet.support = -9999, 500, "w"
+    pet.ensure_visible()
+    assert pet.state.motion is Motion.AIRBORNE and pet.support is None
+
+
+def test_ensure_visible_leaves_a_pet_that_is_on_screen(pet):
+    g = pet.screen_geo()
+    pet.px, pet.py = g.left + 100, g.top + 100
+    pet.enter(State())
+    pet.ensure_visible()
+    assert pet.state == State() and pet.px == g.left + 100
+
+
+def test_ensure_visible_does_not_interrupt_a_drag(pet):
+    pet.px, pet.py = -9999, 500
+    pet.enter(State(Motion.DRAG))
+    pet.ensure_visible()
+    assert pet.state.motion is Motion.DRAG

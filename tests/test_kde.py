@@ -25,3 +25,11 @@ def test_bus_forwards_good_payload_and_ignores_bad():
     bus.windows("not json")
     bus.windows("null")
     assert got == [{"a": (1, 2, 3, 4)}]                       # the bad ones never reach the pet
+
+
+def test_bad_payload_warnings_are_rate_limited(caplog):
+    bus = Bus(lambda w: None)
+    with caplog.at_level("WARNING", logger="mochi"):
+        for _ in range(50):
+            bus.windows("garbage")
+    assert len(caplog.records) == 1 and bus.dropped == 49

@@ -2,6 +2,7 @@
 import json
 import logging
 import math
+import time
 from pathlib import Path
 
 from PySide6.QtCore import ClassInfo, QObject, Slot
@@ -12,6 +13,7 @@ from .base import Platform
 
 log = logging.getLogger("mochi")
 SERVICE, PATH, SCRIPT = "org.mochi.Pet", "/pet", "mochi"
+WARN_EVERY = 10.0                   # seconds between "bad payload" warnings: a noisy sender must not flood the log
 
 
 def parse_windows(js):
@@ -36,14 +38,17 @@ class Bus(QObject):
     """Receives window rects pushed by kwin.js (Wayland won't let a normal app list other windows)."""
     def __init__(self, on_windows):
         super().__init__()
-        self.on_windows = on_windows
+        self.on_windows, self.last_warn, self.dropped = on_windows, -WARN_EVERY, 0
 
     @Slot(str)
     def windows(self, js):
         try:
             wins = parse_windows(js)
         except (ValueError, TypeError) as e:       # anyone on the session bus can call us; keep the last good list
-            log.warning("ignored bad window payload: %s", e)
+            now, self.dropped = time.monotonic(), self.dropped + 1
+            if now - self.last_warn >= WARN_EVERY:
+                log.warning("ignored bad window payload: %s (%d since the last warning)", e, self.dropped)
+                self.last_warn, self.dropped = now, 0
             return
         self.on_windows(wins)
 

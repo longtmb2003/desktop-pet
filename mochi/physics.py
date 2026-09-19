@@ -5,6 +5,7 @@ from typing import Any, NamedTuple
 S, FEET = 160, 146                  # window size, y of the floor line inside the window
 GRAVITY, WALK_SPEED = 1800, 55
 HEAD = 190                          # a window must be this far below the screen top to be stood on
+MIN_W = 80                          # narrower windows can't hold the pet: span() would be empty and it would jitter
 
 Wins = dict[Any, tuple[float, float, float, float]]     # id -> (x, y, w, h), ordered bottom -> top
 
@@ -30,7 +31,7 @@ def surface(wins, support, cx, feet, b):
     """(window-y of the surface under the feet, id of the window it is or None for the screen floor)"""
     best, wid = b.bottom + 1, None
     for i, (x, y, w, _h) in wins.items():
-        if x + 24 <= cx <= x + w - 24 and y >= b.top + HEAD and y < best and (y >= feet - 6 or i == support) \
+        if w >= MIN_W and x + 24 <= cx <= x + w - 24 and y >= b.top + HEAD and y < best and (y >= feet - 6 or i == support) \
                 and not covered(wins, i, cx, y + 1):
             best, wid = y, i
     return best - FEET, wid
@@ -49,7 +50,7 @@ def hop_target(wins, cx, feet, b):
     """(vx, vy, facing or None) for a jump from the floor onto a nearby, uncovered window top; None if there is none"""
     for i, (x, y, w, _h) in wins.items():
         up = feet - y                                          # how high the top is above our feet
-        if 20 < up < 200 and y >= b.top + HEAD and x - 120 < cx < x + w + 120:
+        if w >= MIN_W and 20 < up < 200 and y >= b.top + HEAD and x - 120 < cx < x + w + 120:
             tx = max(x + 40, min(x + w - 40, cx))              # aim for a spot on top, then solve the arc
             if covered(wins, i, tx, y + 1): continue           # that spot is under another window
             vy = -math.sqrt(2 * GRAVITY * (up + 40))

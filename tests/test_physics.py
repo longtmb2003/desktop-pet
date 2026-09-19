@@ -85,3 +85,18 @@ def test_hop_skips_a_landing_spot_hidden_by_another_window():
     a, b = (600, 900, 400, 300), (500, 850, 600, 300)
     assert hop_target({"a": a, "b": b}, 500, 1080, B) is None                             # b is above a and covers the spot
     assert hop_target({"b": b, "a": a}, 500, 1080, B) is not None                         # a is above b: a is free
+
+
+def test_window_narrower_than_min_width_is_not_a_surface_or_hop_target():
+    from mochi.physics import MIN_W
+    narrow = {"a": (400, 900, MIN_W - 1, 300)}
+    assert surface(narrow, None, 400 + MIN_W // 2, 500, B)[1] is None
+    assert hop_target(narrow, 400, 1080, B) is None
+    wide = {"a": (400, 900, MIN_W, 300)}
+    assert surface(wide, None, 400 + MIN_W // 2, 500, B)[1] == "a"
+
+
+def test_walking_range_is_never_empty_on_a_valid_surface():
+    from mochi.physics import MIN_W
+    lo, hi = span({"a": (400, 900, MIN_W, 300)}, B, "a")
+    assert lo <= hi

@@ -32,6 +32,7 @@ class Pet(QWidget):
         self.clock = QElapsedTimer(); self.clock.start()   # real frame time, see tick()
         self.timer = QTimer(self, interval=33, timeout=self.tick)
         self.timer.start()
+        QGuiApplication.instance().screenRemoved.connect(lambda _: QTimer.singleShot(0, self.ensure_visible))
 
     def set_windows(self, wins):
         self.wins = wins
@@ -169,6 +170,12 @@ class Pet(QWidget):
         g = QGuiApplication.primaryScreen().availableGeometry()
         self.px, self.py, self.vy, self.vx, self.support = g.center().x() - S / 2, g.top() - 100, 0.0, 0.0, None
         self.enter(State(Motion.AIRBORNE))
+
+    def ensure_visible(self):
+        """called when a screen goes away: if the pet was on it, bring it back"""
+        c = QPoint(int(self.px) + S // 2, int(self.py) + FEET)
+        if self.state.motion is not Motion.DRAG and QGuiApplication.screenAt(c) is None:
+            self.bring_back()
 
     def set_theme(self, name):
         self.theme = name
