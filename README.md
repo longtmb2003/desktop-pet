@@ -4,10 +4,12 @@
 ## Tính năng
 
 - Đi lại, ngồi, ngủ (có Zzz), chớp mắt, mắt nhìn theo con trỏ chuột
+- Tự chọn ngẫu nhiên các động tác: ngáp, vươn vai, liếm chân, và chạy đuổi theo con trỏ
 - Kéo thả để nhấc lên, thả ra thì rơi; bấm vào thì nhảy lên và bay trái tim
 - Đứng và đi trên đỉnh các cửa sổ (đi theo khi bạn kéo cửa sổ), thỉnh thoảng nhảy lên cửa sổ gần đó
 - Click xuyên qua phần trong suốt quanh pet
-- Chuột phải: Ngủ / Thoát
+- 5 màu (Kem, Cam, Xám, Bạc hà, Hồng): chuột phải → Màu, được nhớ cho lần chạy sau
+- Chuột phải: Màu / Ngủ / Thoát
 
 ## Chạy
 
@@ -28,7 +30,7 @@ Tự chạy khi đăng nhập KDE: tạo `~/.config/autostart/mochi-pet.desktop`
 ## Chưa làm
 
 - Leo tường / bám cạnh cửa sổ
-- Đổi màu, thêm động tác, nhiều pet cùng lúc
+- Nhiều pet cùng lúc
 
 Đã thử trên Fedora 44, KDE Plasma 6.7 (Wayland), PySide6.
 
