@@ -5,7 +5,7 @@ from PySide6.QtCore import QElapsedTimer, QPoint, Qt, QTimer
 from PySide6.QtGui import QCursor, QGuiApplication, QPainter
 from PySide6.QtWidgets import QApplication, QMenu, QWidget
 
-from . import physics
+from . import autostart, physics
 from .physics import FEET, GRAVITY, S, WALK_SPEED, Bounds
 from .renderer import THEMES, paint, silhouette
 from .settings import Settings
@@ -24,6 +24,7 @@ class Pet(QWidget):
         self.facing, self.hearts = 1, []            # hearts: [x, y, life]
         self.wins, self.support, self.vx, self.grounded = {}, None, 0.0, False   # wins: id -> (x, y, w, h); support: id we stand on
         self.next_blink, self.moved, self.press, self.mask_key = 2.0, False, None, None
+        self.paused = False
         self.cfg = settings or Settings()
         self.theme = self.cfg.theme
         g = self.screen_geo()
@@ -162,6 +163,9 @@ class Pet(QWidget):
             a.triggered.connect(lambda _, n=name: self.set_theme(n))
         m.addAction("Ngủ", lambda: self.enter(State(Motion.SLEEP)))
         m.addAction("Gọi về", self.bring_back)
+        a = m.addAction("Tạm dừng"); a.setCheckable(True); a.setChecked(self.paused); a.toggled.connect(self.set_paused)
+        a = m.addAction("Tự chạy khi đăng nhập"); a.setCheckable(True); a.setChecked(autostart.is_enabled())
+        a.toggled.connect(lambda on: autostart.enable() if on else autostart.disable())
         m.addAction("Thoát", QApplication.quit)
         m.exec(e.globalPos())
 
@@ -170,6 +174,15 @@ class Pet(QWidget):
         g = QGuiApplication.primaryScreen().availableGeometry()
         self.px, self.py, self.vy, self.vx, self.support = g.center().x() - S / 2, g.top() - 100, 0.0, 0.0, None
         self.enter(State(Motion.AIRBORNE))
+
+    def set_paused(self, on):
+        """freeze the pet in place (timer stopped, so no CPU) or let it carry on"""
+        self.paused = on
+        if on:
+            self.timer.stop()
+        else:
+            self.clock.restart()                                 # don't count the pause as one huge frame
+            self.timer.start()
 
     def ensure_visible(self):
         """called when a screen goes away: if the pet was on it, bring it back"""

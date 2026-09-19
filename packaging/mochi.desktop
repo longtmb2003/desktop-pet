@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Mochi
+Comment=A tiny vector desktop pet
+Exec=@BIN@
+Icon=mochi
+Terminal=false
+Categories=Utility;
+StartupNotify=false

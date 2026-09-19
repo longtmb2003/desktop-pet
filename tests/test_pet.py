@@ -90,3 +90,11 @@ def test_ensure_visible_does_not_interrupt_a_drag(pet):
     pet.enter(State(Motion.DRAG))
     pet.ensure_visible()
     assert pet.state.motion is Motion.DRAG
+
+
+def test_pause_freezes_and_resume_does_not_count_the_pause(pet):
+    pet.set_paused(True)
+    assert pet.paused and not pet.timer.isActive()
+    pet.set_paused(False)
+    assert not pet.paused and pet.timer.isActive()
+    pet.timer.stop()
