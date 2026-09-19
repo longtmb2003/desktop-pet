@@ -24,6 +24,7 @@ OUT = ROOT / "mochi" / "pets" / "packs" / "hanhan"
 # beyond the straight line that the coat edge would follow without it is erased, and that line is drawn as the new coat edge.
 ARM_CUT = {"left": ((152, 352), (126, 557), (60, 340), (60, 575)), "right": ((332, 345), (350, 562), (460, 335), (460, 580))}
 EDGE_INK = QColor(28, 34, 48)
+HEAD_BOTTOM = 353                                    # where the head ends and the torso begins (cropped body pixels)
 SHOULDERS = {"left": [158, 372], "right": [326, 366]}     # where a drawn arm is rooted: just inside the coat edges left by the cut
 GRIN_RECT = (520, 135, 705, 262)                    # the grin face inside the close-up head (source pixels), clear of its outline and ears
 GRIN_SCALE, GRIN_ROLL, GRIN_SHIFT = 1.44, -11.0, (0, -8)   # close-up -> body head size; the close-up head is rolled about 11 degrees; nudge
@@ -155,7 +156,7 @@ def main():
             f.save(str(OUT / name)); files[kind].append(name)
     (OUT / "pack.json").write_text(json.dumps({
         "id": "hanhan", "name": "Hà Nhân", "size": 240, "feet": 232, "height": 200, "walk_speed": 42,
-        "body": "body.png", "body_free": free, "shoulders": SHOULDERS,
+        "body": "body.png", "body_free": free, "shoulders": SHOULDERS, "head_bottom": HEAD_BOTTOM,
         "ride": {"image": "ride.png", "height": 170, "speed": 2.0, "wheels": wheels,
                  "lines": ["Ting ting!", "Tránh ra, tránh ra!", "Vù vù~", "Đừng cản đường tôi!"]},
         "face": {"box": list(box)}, "faces": files, "fps": {"talk": 12, "laugh": 8},

@@ -175,5 +175,6 @@
  "bob": 5,
  "work_prop": "sign",
  "looks": "left",
- "turn": 0.3
+ "turn": 0.3,
+ "head_bottom": 353
 }

@@ -348,3 +348,26 @@ def test_the_raised_finger_is_on_the_same_side_of_the_screen_whichever_way_it_fa
         left = count(img, (0, 0, mid - 28, p.size), lambda c, rgb=rgb: c.rgb() == rgb)  # noqa: B023
         sides[facing] = (right, left)
     assert abs(sides[1][0] - sides[-1][0]) < 25 and abs(sides[1][1] - sides[-1][1]) < 25
+
+
+def test_a_pack_can_name_where_the_head_ends_and_bad_values_are_refused(qapp, tmp_path):
+    import json
+    assert load_dir(write_pack(tmp_path / "h", id="h", head_bottom=30)).pack.head_bottom == 30
+    assert load_dir(write_pack(tmp_path / "n", id="n")).pack.head_bottom == 0
+    for bad in (-1, 9999, "chin", None):
+        root = write_pack(tmp_path / "b", id="b")
+        j = json.loads((root / "pack.json").read_text()); j["head_bottom"] = bad
+        (root / "pack.json").write_text(json.dumps(j))
+        if bad is None: continue
+        with pytest.raises(ValueError, match="head_bottom"):
+            load_dir(root)
+
+
+def test_the_head_is_drawn_over_a_sleeve_that_reaches_it(make, tmp_path):
+    """with the head layer on, a raised arm passes behind the head; without it the same arm is drawn over the head"""
+    p = make_pet(make, tmp_path, head_bottom=40)                          # (the synthetic body is 80 px tall: its top half is 'the head')
+    p.state, p.facing, p.drawn_facing, p.t, p.dur = State(action=Action.LECTURE), 1, 1, 10.0, 4.0
+    with_layer = render(p)
+    p.defn.pack.head_bottom = 0
+    without = render(p)
+    assert bytes(with_layer.constBits()) != bytes(without.constBits())

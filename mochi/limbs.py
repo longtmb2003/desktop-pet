@@ -60,80 +60,65 @@ def draw_hand(p, wrist, angle, kind="open", size=1.0):
     p.restore()
 
 
+def _along(shoulder, control, wrist, t):
+    """(point, unit tangent) at parameter t of the quadratic curve shoulder -> wrist bending towards `control`"""
+    om = 1.0 - t
+    pt = shoulder * (om * om) + control * (2.0 * om * t) + wrist * (t * t)
+    d = (control - shoulder) * (2.0 * om) + (wrist - control) * (2.0 * t)
+    n = math.hypot(d.x(), d.y())
+    return pt, (d / n if n > 1e-6 else QPointF(1, 0))
+
+
 def draw_arm(p, coat, shoulder, target, width, kind="open", l1=36.0, l2=34.0, hand_size=None):
-    """a smooth tapered sleeved arm from `shoulder` to a hand at `target`: one continuous sleeve tapering towards the wrist,
-    a cream cuff, then the hand. Returns the wrist and the elbow."""
+    """a smooth tapered sleeved arm from `shoulder` to a hand at `target`: one continuous sleeve tapering towards the wrist with a
+    gentle curve where the arm bends, a cream cuff, then the hand. The sleeve's root is buried in the body (its end is not
+    outlined), so it comes out of the shoulder instead of being stuck on. Returns the wrist and the elbow."""
     elbow, wrist = two_link(shoulder, target, l1, l2)
     mid = (shoulder + wrist) * 0.5
-    control = mid + (elbow - mid) * 0.5
+    control = mid + (elbow - mid) * 0.8                                              # nearly through the elbow, but softened
 
-    n_samples = 16
-    pts_left = []
-    pts_right = []
-    u_last = QPointF(1, 0)
+    n = 28
+    samples = []                                                                     # (centre, normal, half-width) from the root outwards
+    _, u0 = _along(shoulder, control, wrist, 0.0)
+    root = shoulder - u0 * (width * 0.35)                                            # start a little inside the body
+    samples.append((root, QPointF(-u0.y(), u0.x()), width * 0.5))
+    for i in range(n):
+        t = i / (n - 1)
+        pt, u = _along(shoulder, control, wrist, t)
+        samples.append((pt, QPointF(-u.y(), u.x()), width * 0.5 * (1.0 - 0.45 * t)))
+    left = [c + nm * hw for c, nm, hw in samples]
+    right = [c - nm * hw for c, nm, hw in samples]
 
-    for i in range(n_samples):
-        t = i / (n_samples - 1)
-        om = 1.0 - t
-        pt = shoulder * (om * om) + control * (2.0 * om * t) + wrist * (t * t)
-        d = (control - shoulder) * (2.0 * om) + (wrist - control) * (2.0 * t)
-        dist = math.hypot(d.x(), d.y())
-        if dist > 1e-6:
-            u_last = d / dist
-        norm = QPointF(-u_last.y(), u_last.x())
-        hw = (width * 0.5) * (1.0 - 0.45 * t)
-        pts_left.append(pt + norm * hw)
-        pts_right.append(pt - norm * hw)
+    body = QPainterPath()
+    body.moveTo(left[0])
+    for pt in left[1:]: body.lineTo(pt)
+    for pt in reversed(right): body.lineTo(pt)
+    body.closeSubpath()
+    p.setPen(Qt.NoPen); p.setBrush(coat); p.drawPath(body)                           # the sleeve: filled, with no outline round its root
 
-    sleeve_path = QPainterPath()
-    sleeve_path.moveTo(pts_left[0])
-    for pt in pts_left[1:]:
-        sleeve_path.lineTo(pt)
-    for pt in reversed(pts_right):
-        sleeve_path.lineTo(pt)
-    sleeve_path.closeSubpath()
+    p.setPen(QPen(OUTLINE, 1.2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)); p.setBrush(Qt.NoBrush)
+    for edge in (left, right):                                                       # the outline: the two long sides, from the shoulder on
+        line = QPainterPath(edge[1])
+        for pt in edge[2:]: line.lineTo(pt)
+        p.drawPath(line)
 
-    p.setPen(QPen(OUTLINE, 1.2, Qt.SolidLine, Qt.SquareCap, Qt.MiterJoin))
-    p.setBrush(coat)
-    p.drawPath(sleeve_path)
+    fold = QPainterPath()
+    for i in range(int(0.25 * n), int(0.70 * n) + 1):                               # one soft darker fold line along the underside
+        c, nm, hw = samples[i + 1]
+        pt = c - nm * (0.3 * hw)
+        if i == int(0.25 * n): fold.moveTo(pt)
+        else: fold.lineTo(pt)
+    p.setPen(QPen(coat.darker(120), 1.0)); p.drawPath(fold)
 
-    fold_path = QPainterPath()
-    i_start = int(0.25 * (n_samples - 1))
-    i_end = int(0.70 * (n_samples - 1))
-    for i in range(i_start, i_end + 1):
-        t = i / (n_samples - 1)
-        om = 1.0 - t
-        pt = shoulder * (om * om) + control * (2.0 * om * t) + wrist * (t * t)
-        d = (control - shoulder) * (2.0 * om) + (wrist - control) * (2.0 * t)
-        dist = math.hypot(d.x(), d.y())
-        u = d / dist if dist > 1e-6 else u_last
-        norm = QPointF(-u.y(), u.x())
-        hw = (width * 0.5) * (1.0 - 0.45 * t)
-        fold_pt = pt - norm * (0.3 * hw)
-        if i == i_start:
-            fold_path.moveTo(fold_pt)
-        else:
-            fold_path.lineTo(fold_pt)
-    p.setPen(QPen(coat.darker(120), 1.0))
-    p.setBrush(Qt.NoBrush)
-    p.drawPath(fold_path)
-
-    hw_wrist = (width * 0.5) * 0.55
-    hw_cuff = hw_wrist * 1.10
+    wrist_pt, u_last = _along(shoulder, control, wrist, 1.0)
     norm_wrist = QPointF(-u_last.y(), u_last.x())
-    cuff_base = wrist - u_last * 4.0
-    cuff_top = wrist + u_last * 4.0
-
-    cuff_path = QPainterPath()
-    cuff_path.moveTo(cuff_base + norm_wrist * hw_cuff)
-    cuff_path.lineTo(cuff_top + norm_wrist * hw_cuff)
-    cuff_path.lineTo(cuff_top - norm_wrist * hw_cuff)
-    cuff_path.lineTo(cuff_base - norm_wrist * hw_cuff)
-    cuff_path.closeSubpath()
-
-    p.setPen(QPen(OUTLINE, 1.0))
-    p.setBrush(CUFF)
-    p.drawPath(cuff_path)
+    hw_cuff = width * 0.5 * 0.55 * 1.10
+    cuff = QPainterPath()
+    for a, b in ((-4.0, 1), (4.0, 1), (4.0, -1), (-4.0, -1)):
+        pt = wrist_pt + u_last * a + norm_wrist * (hw_cuff * b)
+        cuff.moveTo(pt) if a == -4.0 and b == 1 else cuff.lineTo(pt)
+    cuff.closeSubpath()
+    p.setPen(QPen(OUTLINE, 1.0)); p.setBrush(CUFF); p.drawPath(cuff)
 
     draw_hand(p, wrist, math.atan2(u_last.y(), u_last.x()), kind, size=hand_size or max(0.7, width / 18))
     return wrist, elbow

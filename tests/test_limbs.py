@@ -115,3 +115,20 @@ def test_arm_has_no_elbow_bump():
     cols = [sum(1 for y in range(120) if img.pixelColor(x, y).rgb() == coat.rgb()) for x in range(20, 95)]
     cols = [c for c in cols if c > 0]
     assert all(cols[i + 1] <= cols[i] + 4 for i in range(len(cols) - 1))                     # (the fold line dents a column or two)
+
+
+def test_the_sleeve_root_has_no_outline_across_it_so_it_comes_out_of_the_shoulder():
+    coat = QColor(70, 82, 104)
+    img = paint(lambda p: draw_arm(p, coat, QPointF(30, 60), QPointF(110, 60), 20, "open", 40, 40), 140)
+    for x in range(22, 33):                                               # the root's end is at x = 30 - 0.35 * 20 = 23; then along the arm
+        dark = [y for y in range(140) if img.pixelColor(x, y).alpha() > 200 and img.pixelColor(x, y).lightness() < 70]
+        assert len(dark) <= 6, (x, len(dark))                             # only the two long edges cross a column, never a wall of ink
+    behind = sum(1 for x in range(24, 30) for y in range(50, 70) if img.pixelColor(x, y).rgb() == coat.rgb())
+    assert behind > 20                                                    # and the sleeve continues a little way back into the body
+
+
+def test_the_sleeve_bends_smoothly_without_a_corner():
+    coat = QColor(70, 82, 104)
+    img = paint(lambda p: draw_arm(p, coat, QPointF(20, 100), QPointF(70, 30), 16, "open", 40, 38), 140)
+    widths = [sum(1 for y in range(140) if img.pixelColor(x, y).rgb() == coat.rgb()) for x in range(22, 70)]
+    assert max(abs(a - b) for a, b in zip(widths, widths[1:], strict=False)) < 14      # no sudden jump in thickness along the arm

@@ -169,8 +169,8 @@ def draw_scold(p, pk, bw, bh, bs, t, action, pet, mir):
     elif action is Action.WAG:
         side = 1 if mir >= 0 else -1                                                  # the arm on the screen's right
         sh = shoulder(pk, side, bs, bw, bh)
-        a = math.radians(-78 + 20 * math.sin(t * 9))                                  # forearm up, wagging side to side: "no, no, no"
-        elbow = sh + QPointF(side * math.cos(math.radians(-15)), math.sin(math.radians(-15))) * l1 * 0.9 + QPointF(0, l1 * 0.55)
+        a = math.radians(-62 + 18 * math.sin(t * 9))                                  # forearm up and out, wagging: "no, no, no"
+        elbow = sh + QPointF(side * l1 * 0.95, l1 * 0.25)
         tip = elbow + QPointF(side * math.cos(a), math.sin(a)) * l2
         draw_arm(p, pk.coat, sh, tip, aw, "point", l1, l2, hsz)
     else:
@@ -238,7 +238,12 @@ def paint_sprite(pet, p):
         draw_ride(p, pk.ride, t, pet.px / pet.scale, 1 if mir >= 0 else -1)
     else:
         rect = QRectF(-bw / 2, -bh, bw, bh)
-        p.drawImage(rect, body_image(pk, arm_sides(pet, mir)))
+        img = body_image(pk, arm_sides(pet, mir))
+        p.drawImage(rect, img)
+        if s.action is Action.WORK: draw_prop(p, pk, bw, bh, bs, t, 1 if mir >= 0 else -1)
+        if s.action in SCOLDING: draw_scold(p, pk, bw, bh, bs, t, s.action, pet, mir)
+        if pk.head_bottom and (s.action in SCOLDING or s.action is Action.WORK):          # the sleeves pass behind the head, not over it
+            p.drawImage(QRectF(rect.x(), rect.y(), bw, pk.head_bottom * bs), img, QRectF(0, 0, img.width(), pk.head_bottom))
         p.save(); p.translate(rect.topLeft()); p.scale(bs, bs)                            # body pixels from here
         bx, by, fw, fh = pk.box
         if lying or s.expression is Expression.DIZZY:
@@ -247,8 +252,6 @@ def paint_sprite(pet, p):
             kind = face_kind(pet)
             p.drawImage(QRectF(bx, by, fw, fh), pk.face(kind, t))
         p.restore()
-        if s.action is Action.WORK: draw_prop(p, pk, bw, bh, bs, t, 1 if mir >= 0 else -1)
-        if s.action in SCOLDING: draw_scold(p, pk, bw, bh, bs, t, s.action, pet, mir)
     p.resetTransform(); p.scale(pet.scale, pet.scale); p.translate(d.size / 2, d.feet)    # extras: upright, not turned with the body
     if on_wheels: draw_ride_effects(p, pet, bw, bh, t)
     if lying:
