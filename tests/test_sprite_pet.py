@@ -289,7 +289,7 @@ def test_holding_a_prop_stays_inside_the_mask_and_the_window_and_looks_different
     assert idle != working                                                   # the prop is really drawn
 
 
-def test_the_busy_sign_is_red_and_its_text_reads_the_same_whichever_way_it_faces(qapp, tmp_path, make):
+def test_the_busy_sign_is_red_and_its_text_reads_the_same_whichever_way_it_faces(qapp, tmp_path, make, monkeypatch):
     sign = load_dir(write_pack(tmp_path / "s", id="s", work_prop="sign"))
     laptop = load_dir(write_pack(tmp_path / "l", id="l", work_prop="laptop"))
     p = make("s", 1.0, {"mochi": MOCHI, "s": sign, "l": laptop})
@@ -301,6 +301,10 @@ def test_the_busy_sign_is_red_and_its_text_reads_the_same_whichever_way_it_faces
                    if (c := img.pixelColor(x, y)).alpha() > 200 and c.red() > 170 and c.green() < 70 and c.blue() < 80)
     p.facing = 1; right = render(p)
     p.facing = -1; left = render(p)
+    import mochi.sprite as sp
+    monkeypatch.setattr(sp, "draw_arm", lambda *a, **k: None)                # (arms aren't mirror images: leave them out)
+    p.facing = 1; right_text = render(p)
+    p.facing = -1; left_text = render(p)
     assert reds(right) > 300 and reds(left) > 300                          # a big red no-entry sign
     p.defn = laptop; p.mask_key = None; p.facing = 1
     assert reds(render(p)) < 30                                            # the laptop is grey: no red to speak of
@@ -308,7 +312,7 @@ def test_the_busy_sign_is_red_and_its_text_reads_the_same_whichever_way_it_faces
     bw = 40 * 150 / 80                                                     # the synthetic body's drawn width
     cy, r = -sign.height * 0.44, bw * 0.30
     x0, y0, w, h = int(sign.size / 2 - bw * 0.2), int(sign.feet + cy + r + 6), int(bw * 0.4), 8
-    assert right.copy(x0, y0, w, h) == left.copy(x0, y0, w, h)
+    assert right_text.copy(x0, y0, w, h) == left_text.copy(x0, y0, w, h)
 
 
 # ---- which way the art looks, and turning round -------------------------------------------------------------------

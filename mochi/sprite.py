@@ -5,8 +5,9 @@ All drawing is in the definition's own pixel space (`defn.size` square, origin a
 import math
 
 from PySide6.QtCore import QPointF, QRect, QRectF, Qt
-from PySide6.QtGui import QColor, QCursor, QPainter, QPainterPath, QPen, QRegion
+from PySide6.QtGui import QColor, QCursor, QPainter, QPainterPath, QPen, QRegion, QTransform
 
+from .limbs import draw_arm
 from .renderer import heart, star
 from .state import SCOLDING, Action, Expression, Motion
 
@@ -39,28 +40,17 @@ def vector_face(p, s, kind, box):
     p.drawEllipse(QPointF(x + w * 0.5, y + h * 0.72), w * 0.05, w * (0.04 if kind == "sleep" else 0.06))
 
 
-SKIN = QColor(247, 203, 160)
 RED = QColor(206, 32, 41)
 
 
-def arm(p, pk, sx, hand, bw, bh):
-    """a sleeve from the shoulder at x = sx (body units, origin at the feet) to a hand: thick round stroke in the coat's colour"""
-    p.setPen(QPen(pk.coat, max(9.0, bw * 0.13), Qt.SolidLine, Qt.RoundCap)); p.drawLine(QPointF(sx, -bh * 0.5), hand)
-
-
-def hand(p, at):
-    p.setPen(QPen(QColor(150, 105, 80), 1)); p.setBrush(SKIN); p.drawEllipse(at, 6.5, 6)
-
-
 def draw_prop(p, pk, bw, bh, t, mirror):
-    """what it holds while working: a red "no entry, busy" sign, or a laptop; both held by two hands with sleeves from the shoulders,
-    so it is clearly gripped rather than floating in front of the body"""
-    sx = bw * 0.27                                                                    # where the sleeves start: on the chest
+    """what it holds while working: a red "no entry, busy" sign, or a laptop; held in two hands on arms with elbows, sleeves from the
+    shoulders, so it is clearly gripped rather than floating in front of the body"""
+    sx, sy0, aw = bw * 0.28, -bh * 0.53, max(11.0, bw * 0.15)                         # shoulders (on the chest), and the sleeve width
+    l1, l2 = bw * 0.32, bw * 0.30
     if pk.work_prop == "sign":
         cy, r = -bh * 0.44, bw * 0.30                                                 # the disc's centre and radius
         grip = QPointF(0, cy + 6)                                                     # the sign is held by its sides
-        holds = [QPointF(side * (r + 1), cy + 6) for side in (-1, 1)]
-        for side, h in zip((-1, 1), holds, strict=True): arm(p, pk, side * sx, h, bw, bh)
         p.save(); p.translate(grip); p.rotate(math.sin(t * 3) * 4); p.translate(-grip)   # the sign sways a little: "not now!"
         p.setPen(QPen(QColor(120, 20, 25), 1.5)); p.setBrush(Qt.white); p.drawEllipse(QPointF(0, cy), r, r)
         p.setPen(QPen(RED, r * 0.24)); p.setBrush(Qt.NoBrush); p.drawEllipse(QPointF(0, cy), r * 0.86, r * 0.86)
@@ -74,14 +64,16 @@ def draw_prop(p, pk, bw, bh, t, mirror):
         p.drawText(QRectF(-plaque.width() / 2, -plaque.height() / 2, plaque.width(), plaque.height()), Qt.AlignCenter, "BẬN")
         p.restore()
         p.restore()
-        for h in holds: hand(p, h)
+        for side in (-1, 1):                                                          # both hands take hold of the rim (they sway with it)
+            rim = QPointF(side * (math.sqrt(r * r - 16 * 16) + 1), cy + 16)                  # a point on the rim, low on its side
+            hold = grip + QTransform().rotate(math.sin(t * 3) * 4).map(rim - grip)
+            draw_arm(p, pk.coat, QPointF(side * sx, sy0), hold, aw, "grip", l1, l2)
     else:
         top = -bh * 0.36
-        for side in (-1, 1): arm(p, pk, side * sx, QPointF(side * bw * 0.20, top + 4), bw, bh)
         p.setPen(QPen(QColor(90, 96, 110), 2)); p.setBrush(QColor(176, 184, 198))
         p.drawRoundedRect(QRectF(-bw * 0.28, top, bw * 0.56, bh * 0.16), 4, 4)
         p.setPen(Qt.NoPen); p.setBrush(QColor(236, 240, 246)); p.drawEllipse(QPointF(0, top + bh * 0.08), 3, 3)
-        for side in (-1, 1): hand(p, QPointF(side * bw * 0.20, top + 2))              # resting on the top edge
+        for side in (-1, 1): draw_arm(p, pk.coat, QPointF(side * sx, sy0), QPointF(side * bw * 0.22, top + 3), aw, "grip", l1, l2)
 
 
 def cursor(pet):
@@ -90,31 +82,30 @@ def cursor(pet):
     return c.x() / pet.scale - pet.defn.size / 2, c.y() / pet.scale - pet.defn.feet
 
 
-def finger(p, pk, shoulder, ang, reach, bw):
-    """a sleeved arm from `shoulder` out at angle `ang` (radians, screen: y down), ending in a fist with the index finger out"""
-    d = QPointF(math.cos(ang), math.sin(ang))
-    hand = shoulder + d * reach
-    p.setPen(QPen(pk.coat, max(9.0, bw * 0.13), Qt.SolidLine, Qt.RoundCap)); p.drawLine(shoulder, hand)
-    p.setPen(QPen(SKIN, 5, Qt.SolidLine, Qt.RoundCap)); p.drawLine(hand, hand + d * 15)              # the pointing finger
-    p.setPen(QPen(QColor(150, 105, 80), 1)); p.setBrush(SKIN); p.drawEllipse(hand, 7, 6.5)
-
-
 def draw_scold(p, pk, bw, bh, t, action, pet, dx, dy):
     """the arm(s) of a scolding character, drawn upright (after the body's own transform): jabbing at the pointer, wagging a raised
-    finger, or gesturing left and right"""
-    sx, sy0, reach = bw * 0.27, -bh * 0.5 - dy, bw * 0.62
+    finger, or gesturing left and right with open hands"""
+    sx, sy0, aw = bw * 0.28, -bh * 0.53 - dy, max(11.0, bw * 0.15)
+    l1, l2 = bw * 0.32, bw * 0.30
+    full = l1 + l2 - 1                                                                # the arm stretched out straight
     if action is Action.POINT:
         cx, cy = cursor(pet)
         side = 1 if cx >= 0 else -1
         sh = QPointF(side * sx + dx, sy0)
-        finger(p, pk, sh, math.atan2(cy - sh.y(), cx - sh.x()), reach + 5 * math.sin(t * 12), bw)      # the jab
+        ang = math.atan2(cy - sh.y(), cx - sh.x())
+        jab = full - 2 + 3 * math.sin(t * 12)
+        draw_arm(p, pk.coat, sh, sh + QPointF(math.cos(ang), math.sin(ang)) * jab, aw, "point", l1, l2)
     elif action is Action.WAG:
         sh = QPointF(sx + dx, sy0)
-        finger(p, pk, sh, math.radians(-72 + 24 * math.sin(t * 9)), reach * 0.8, bw)                   # up, and side to side: "no, no, no"
+        a = math.radians(-78 + 20 * math.sin(t * 9))                                  # forearm up, wagging side to side: "no, no, no"
+        elbow = sh + QPointF(math.cos(math.radians(-15)), math.sin(math.radians(-15))) * l1 * 0.9 + QPointF(0, l1 * 0.55)
+        hand = elbow + QPointF(math.cos(a), math.sin(a)) * l2
+        draw_arm(p, pk.coat, sh, hand, aw, "point", l1, l2)
     else:
-        side = -1 if int(t * 1.6) % 2 else 1
-        a = math.radians(-25 + 12 * math.sin(t * 12))
-        finger(p, pk, QPointF(side * sx + dx, sy0), math.atan2(math.sin(a), side * math.cos(a)), reach, bw)
+        for side, phase in ((1, 0.0), (-1, math.pi)):                                 # both arms, alternately flung out
+            a = math.radians(-20 + 25 * math.sin(t * 6 + phase))
+            sh = QPointF(side * sx + dx, sy0)
+            draw_arm(p, pk.coat, sh, sh + QPointF(side * math.cos(a), math.sin(a)) * full * 0.85, aw, "open", l1, l2)
 
 
 def pose(pet):
@@ -251,7 +242,7 @@ def sprite_mask(pet):
         hx = bw / 2                                                           # a body leaning about its feet sweeps this box
         sin, cos = math.sin(th), math.cos(th)
         reach, up, down = hx * cos + bh * sin + 12, bh * cos + hx * sin + pk.bob + 40, hx * sin + 8
-        reach = max(reach, bw * (0.27 + 0.62) + 5 + 15 + 8)                   # ... or an arm stretched out to point at you
+        reach = max(reach, bw * 0.9 + 30)                                     # ... or an arm stretched out to point at you
         region = QRegion(QRectF((c - reach) * k, (d.feet - up) * k, 2 * reach * k, (up + down) * k).toRect())
     for x, y, _ in pet.hearts: region += QRegion(QRect(round((c + x - 10) * k), round((d.feet + y - 10) * k), round(20 * k), round(20 * k)))
     return region.intersected(QRegion(0, 0, pet.size, pet.size))
