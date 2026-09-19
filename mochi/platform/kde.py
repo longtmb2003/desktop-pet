@@ -17,8 +17,11 @@ SERVICE, PATH, SCRIPT = "org.mochi.Pet", "/pet", "mochi"
 def parse_windows(js):
     """kwin.js payload '[[id, x, y, w, h], ...]' -> {id: (x, y, w, h)}.
     Malformed entries are skipped; a payload that isn't a list raises ValueError/TypeError (rejected whole)."""
+    data = json.loads(js)
+    if not isinstance(data, list):
+        raise TypeError(f"expected a list of windows, got {type(data).__name__}")
     wins = {}
-    for e in json.loads(js):
+    for e in data:
         try:
             i, x, y, w, h = e
             if all(isinstance(v, (int, float)) and math.isfinite(v) for v in (x, y, w, h)) and w > 0 and h > 0:

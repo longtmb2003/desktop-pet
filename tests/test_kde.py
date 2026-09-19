@@ -1,0 +1,27 @@
+import pytest
+
+from mochi.platform.kde import Bus, parse_windows
+
+
+def test_parse_valid_and_ordered():
+    assert list(parse_windows('[["b",1,2,3,4],["a",5,6,7,8]]').items()) == [("b", (1, 2, 3, 4)), ("a", (5, 6, 7, 8))]
+
+
+def test_malformed_entries_are_skipped():
+    js = '[["a",1,2,3,4],["bad",0,0,-5,10],["s",1,2,"x",4],["short",1,2],[7],5,["nan",1,2,3,NaN],["inf",1,2,3,Infinity],["ok",1.5,2,3,4]]'
+    assert parse_windows(js) == {"a": (1, 2, 3, 4), "ok": (1.5, 2, 3, 4)}
+
+
+@pytest.mark.parametrize("bad", ["not json", "5", "null", '{"a": 1}'])
+def test_non_list_payload_is_rejected_whole(bad):
+    with pytest.raises((ValueError, TypeError)):
+        parse_windows(bad)
+
+
+def test_bus_forwards_good_payload_and_ignores_bad():
+    got = []
+    bus = Bus(got.append)
+    bus.windows('[["a",1,2,3,4]]')
+    bus.windows("not json")
+    bus.windows("null")
+    assert got == [{"a": (1, 2, 3, 4)}]                       # the bad ones never reach the pet
