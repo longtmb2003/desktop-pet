@@ -4,6 +4,7 @@ import logging
 import math
 import time
 from pathlib import Path
+from typing import Any
 
 from PySide6.QtCore import ClassInfo, QObject, Slot
 from PySide6.QtDBus import QDBusConnection, QDBusInterface, QDBusMessage
@@ -33,7 +34,10 @@ def parse_windows(js):
     return wins
 
 
-@ClassInfo({"D-Bus Interface": SERVICE})
+_class_info: Any = ClassInfo                       # PySide6's type stubs declare ClassInfo without arguments
+
+
+@_class_info({"D-Bus Interface": SERVICE})
 class Bus(QObject):
     """Receives window rects pushed by kwin.js (Wayland won't let a normal app list other windows)."""
     def __init__(self, on_windows):
