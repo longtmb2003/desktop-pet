@@ -9,7 +9,8 @@ from PySide6.QtGui import (QPainter, QColor, QPen, QBrush, QPainterPath, QGuiApp
 from PySide6.QtWidgets import QApplication, QWidget, QMenu
 
 S, FEET = 160, 146                  # window size, y of the floor line inside the window
-DUR = {"idle": (2, 5), "walk": (3, 8), "sleep": (8, 20), "happy": (1.4, 1.4)}  # seconds per state
+DUR = {"idle": (2, 5), "walk": (3, 8), "sleep": (8, 20), "happy": (1.4, 1.4),      # seconds per state
+       "yawn": (1.8, 1.8), "stretch": (2.4, 2.4), "groom": (3, 4.5), "chase": (5, 9)}
 GRAVITY, WALK_SPEED = 1800, 55
 HEAD = 190                          # a window must be this far below the screen top to be stood on
 THEMES = {  # body gradient top/bottom, ear, tail, inner ear, eye
@@ -76,7 +77,7 @@ class Pet(QWidget):
 
     # ---- behaviour -------------------------------------------------------
     def pick_next(self):
-        w = {"idle": 4, "walk": 3, "sleep": 1}
+        w = {"idle": 4, "walk": 3, "sleep": 1, "groom": 2, "yawn": 1, "stretch": 1, "chase": 1}
         w.pop(self.state, None)   # never repeat the action it just finished
         return random.choices(list(w), list(w.values()))[0]
 
@@ -84,6 +85,7 @@ class Pet(QWidget):
         self.state = s
         lo, hi = DUR.get(s, (0, 0))
         self.until = self.t + random.uniform(lo, hi)
+        self.began, self.dur = self.t, max(self.until - self.t, 1e-3)          # for one-shot animations
         if s == "walk":
             self.facing = random.choice((-1, 1))
 
@@ -103,8 +105,9 @@ class Pet(QWidget):
             g = self.screen_geo()
             cx = self.px + S / 2
             floor, wid = self.surface(cx, self.py + FEET, g)
-            if wid is not None and wid == self.support and self.vy >= 0:
-                self.py, self.grounded = floor, True               # riding the window it stands on
+            riding = wid is not None and wid == self.support and self.vy >= 0   # already standing on this window
+            if riding:
+                self.py = floor                                    # ride it while it moves
             elif self.py < floor - 0.5 or self.vy < 0:             # airborne
                 self.grounded = False
                 self.vy += GRAVITY * dt
@@ -115,11 +118,16 @@ class Pet(QWidget):
                     if self.state == "fall":
                         self.set_state("idle")
             else:
-                self.support, self.grounded = wid, True
+                self.support, riding = wid, True
+            if riding:                                             # on the floor or a window: free to move
+                self.grounded = True
                 if self.state == "walk":
                     self.walk(dt, g, cx, wid)
+                elif self.state == "chase":
+                    self.chase(dt, g, cx, wid)
             if self.state in DUR and self.t > self.until:
-                self.set_state("idle" if self.state == "happy" else self.pick_next())
+                nxt = {"happy": "idle", "yawn": random.choice(("sleep", "idle"))}    # a yawn often ends in a nap
+                self.set_state(nxt.get(self.state) or self.pick_next())
             self.move(int(self.px), int(self.py))
         self.update_mask()
         self.update()
@@ -132,14 +140,28 @@ class Pet(QWidget):
                 best, wid = y, i
         return best - FEET, wid
 
-    def walk(self, dt, g, cx, wid):
-        step = self.facing * WALK_SPEED * dt
-        self.px += step; cx += step
+    def span(self, g, wid):
+        """x-range the centre may walk in: the screen, or the top of the window we stand on"""
         lo, hi = g.left() + 50, g.right() - 50
         if wid is not None:
             x, _, w, _ = self.wins[wid]
             lo, hi = max(lo, x + 34), min(hi, x + w - 34)
-        elif random.random() < 0.004:                              # on the floor: sometimes hop onto a nearby window
+        return lo, hi
+
+    def chase(self, dt, g, cx, wid):
+        lo, hi = self.span(g, wid)
+        dx = max(lo, min(hi, QCursor.pos().x())) - cx
+        if abs(dx) < 45:
+            self.set_state("happy")                                # caught it!
+            return
+        self.facing = 1 if dx > 0 else -1
+        self.px += self.facing * 2 * WALK_SPEED * dt
+
+    def walk(self, dt, g, cx, wid):
+        step = self.facing * WALK_SPEED * dt
+        self.px += step; cx += step
+        lo, hi = self.span(g, wid)
+        if wid is None and random.random() < 0.004:                              # on the floor: sometimes hop onto a nearby window
             self.hop_to(cx, self.py + FEET, g)
         if cx < lo or cx > hi:
             out = -1 if cx < lo else 1
@@ -161,14 +183,14 @@ class Pet(QWidget):
 
     def update_mask(self):
         # clip the window to the pet's silhouette so clicks pass through the transparent rest
-        c, f, sleep = S // 2, self.facing, self.state == "sleep"
+        c, f, sleep = S // 2, -self.facing, self.state == "sleep"
         key = (f, sleep, tuple((int(x), int(y)) for x, y, _ in self.hearts))
         if key == self.mask_key: return
         self.mask_key = key
-        r = QRegion(c - 64, FEET - 88, 128, 100, QRegion.Ellipse)                   # body
-        r += QRegion(c - 58, FEET - 106, 116, 60)                                  # ears
+        r = QRegion(c - 72, FEET - 88, 144, 100, QRegion.Ellipse)                   # body
+        r += QRegion(c - 66, FEET - 106, 132, 60)                                  # ears
         r += QRegion(c - 60, FEET - 14, 120, 28)                                    # feet + shadow
-        r += QRegion(min(c + f * 30, c + f * 100), FEET - 92, 70, 80)               # tail
+        r += QRegion(min(c + f * 30, c + f * 100), FEET - 92, 70, 96)               # tail
         if sleep: r += QRegion(c + 28, FEET - 124, 48, 44)                         # zzz
         for x, y, _ in self.hearts: r += QRegion(int(c + x - 10), int(FEET + y - 10), 20, 20)
         self.setMask(r)
@@ -232,10 +254,16 @@ class Pet(QWidget):
         if st == "walk": hop = abs(math.sin(t * 9)) * 7
         elif st == "sleep": sy = 1 + 0.04 * math.sin(t * 1.2)
         elif st == "drag": sy = 1.08
+        o = math.sin(math.pi * min(1, (t - self.began) / self.dur))               # 0 -> 1 -> 0 over a one-shot move
+        tilt = shift = 0.0
+        if st == "stretch": sy -= .14 * o; tilt = 4 * o; shift = 8 * o                           # stretch forward, bum up
+        elif st == "yawn": sy += .05 * o; tilt = -5 * o
+        elif st == "chase": hop = abs(math.sin(t * 14)) * 9
         sy -= self.squash
         sx = 2 - sy if st != "drag" else .94        # keep volume: taller = thinner
-        p.translate(0, -hop)
-        p.scale(sx * self.facing, sy)
+        p.translate(shift * self.facing, -hop)
+        p.rotate(tilt * self.facing)
+        p.scale(-sx * self.facing, sy)                               # tail trails behind the walking direction
 
         def blob(c, x, y, rx, ry):
             p.setPen(Qt.NoPen); p.setBrush(c); p.drawEllipse(QPointF(x, y), rx, ry)
@@ -270,10 +298,10 @@ class Pet(QWidget):
         # face
         for m in (-1, 1): blob(QColor(255, 157, 176, 120), m * 31, -37, 8, 4.5)
         cur = QCursor.pos() - self.pos() - QPoint(S // 2, FEET - 46)                 # eyes follow the cursor
-        lx, ly = max(-1, min(1, cur.x() / 250)) * 2.5 * self.facing, max(-1, min(1, cur.y() / 250)) * 1.5
+        lx, ly = max(-1, min(1, cur.x() / 250)) * -2.5 * self.facing, max(-1, min(1, cur.y() / 250)) * 1.5
         pen = QPen(DARK, 3, Qt.SolidLine, Qt.RoundCap)
         for x in (-19, 19):
-            if st == "sleep" or self.blink > 0:
+            if st in ("sleep", "yawn", "stretch", "groom") or self.blink > 0:
                 arc = QPainterPath(QPointF(x - 7, -46)); arc.quadTo(x, -40, x + 7, -46)
             elif st == "happy":
                 arc = QPainterPath(QPointF(x - 7, -43)); arc.quadTo(x, -53, x + 7, -43)
@@ -285,9 +313,15 @@ class Pet(QWidget):
             p.setPen(pen); p.setBrush(Qt.NoBrush); p.drawPath(arc)
         if st == "drag": blob(DARK, 0, -35, 3, 4)
         elif st == "happy": blob(PINK.darker(130), 0, -35, 4, 4.5)
+        elif st == "yawn": blob(PINK.darker(150), 0, -33, 4 + 3 * o, 2 + 8 * o)
         else:
             mouth = QPainterPath(QPointF(-5, -38)); mouth.quadTo(-2.5, -33, 0, -38); mouth.quadTo(2.5, -33, 5, -38)
             p.setPen(QPen(DARK, 2, Qt.SolidLine, Qt.RoundCap)); p.setBrush(Qt.NoBrush); p.drawPath(mouth)
+
+        if st == "groom":                                          # lick a paw, stroke the cheek
+            lift = (.5 + .5 * math.sin(t * 9)) * min(1, o * 3)
+            blob(TAIL, 27 - 5 * lift, -16 - 22 * lift, 8, 10)
+            blob(PINK, 25 - 5 * lift, -24 - 22 * lift, 2.5, 2)
 
         # floating extras, drawn in unscaled space
         p.resetTransform(); p.translate(S / 2, FEET)
