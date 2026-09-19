@@ -14,6 +14,8 @@ pack.json (all lengths in window pixels at scale 1, image coordinates in pixels 
   chatter, scream  what it says now and then / when the ground vanishes
   drop, desktop_remark   what it says when a file is dropped on it / about an item on the desktop; "{name}" stands for the item
   sway, bob        walking waddle: degrees of tilt and pixels of bounce
+  looks            "right" (default) or "left": the way the art in body.png faces. It is mirrored so it always looks where it walks
+  turn             seconds to turn round when it changes direction (default 0.25; 0 = instantly)
   work_prop        what it holds while working (Pomodoro): "laptop" (default) or "sign", a red no-entry "BẬN" (busy) sign
 """
 import json
@@ -45,6 +47,7 @@ class SpritePack:
     sway: float = 4.0
     bob: float = 4.0
     masks: dict = field(default_factory=dict)     # cache: (scale, facing) -> exact outline region
+    art: int = 1                                  # the way the body image faces: 1 = right, -1 = left
     work_prop: str = "laptop"                     # what it holds while working: "laptop" | "sign" (a red "busy" sign)
     coat: QColor = field(default_factory=lambda: QColor(70, 82, 104))     # its sleeve colour, sampled from the body
 
@@ -127,7 +130,12 @@ def load_dir(root):
     sway, bob = _num(j.get("sway", 4), "sway", 0, 20), _num(j.get("bob", 4), "bob", 0, 30)
     prop = j.get("work_prop", "laptop")
     if prop not in ("laptop", "sign"): raise ValueError(f"work_prop must be laptop or sign, got {prop!r}")
-    pack = SpritePack(body, height, (bx, by, bw, bh), faces, fps, sway, bob, work_prop=prop, coat=coat_color(body))
+    looks = j.get("looks", "right")
+    if looks not in ("left", "right"): raise ValueError(f"looks must be left or right, got {looks!r}")
+    turn = _num(j.get("turn", 0.25), "turn", 0, 2)
+    pack = SpritePack(body, height, (bx, by, bw, bh), faces, fps, sway, bob, art=-1 if looks == "left" else 1, work_prop=prop,
+                      coat=coat_color(body))
     text = {k: clean_text(j.get(k) or "")[:80] or dflt for k, dflt in (("drop", PetDef.drop), ("desktop_remark", PetDef.desktop_remark))}
     return PetDef(pid, name, "sprite", size, feet, feet - int(height), _num(j.get("walk_speed", 45), "walk_speed", 5, 400), weights,
-                  chatter or ("...",), clean_text(j.get("scream") or "Á!")[:20] or "Á!", text["drop"], text["desktop_remark"], pack)
+                  chatter or ("...",), clean_text(j.get("scream") or "Á!")[:20] or "Á!", drop=text["drop"],
+                  desktop_remark=text["desktop_remark"], pack=pack, turn_s=turn)

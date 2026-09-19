@@ -25,7 +25,7 @@ def pet(qapp, tmp_path):
     p.close()
 
 
-def write_pack(root, wide=False, **over):
+def write_pack(root, wide=False, nose=False, **over):
     """a small valid sprite pack in `root` (an opaque blob as the body, ink dots as faces); `over` replaces pack.json keys"""
     import json
 
@@ -36,6 +36,7 @@ def write_pack(root, wide=False, **over):
     p = QPainter(body); p.setBrush(QColor("#6a8caf"))
     if wide: p.drawRect(0, 0, body.width(), 80)                # a rectangle: its corners are the hard case for turning and leaning
     else: p.drawEllipse(2, 2, 36, 76)
+    if nose: p.setBrush(QColor("#c0392b")); p.drawRect(body.width() - 10, 30, 10, 12)      # a nose on the right: the art looks right
     p.end(); body.save(str(root / "body.png"))
     for name in ("n", "t0", "t1", "l"):
         f = QImage(20, 10, QImage.Format_ARGB32); f.fill(0)

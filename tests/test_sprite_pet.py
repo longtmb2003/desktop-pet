@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 from conftest import write_pack
-from PySide6.QtCore import QPoint, QSettings
+from PySide6.QtCore import QPoint, QSettings, Qt
 from PySide6.QtGui import QImage, QPainter
 
 from mochi.pet import Pet
@@ -154,7 +154,6 @@ STATES = [State(), State(Motion.WALK), State(Motion.WALK, Expression.DIZZY), Sta
 def uncovered_and_clipped(p):
     """(strongest visible pixel outside the click mask, strongest visible pixel on the window edge), as alpha values, for what the
     pet paints now. Done with image operations, not a Python loop over pixels, so a sweep of poses stays fast."""
-    from PySide6.QtCore import Qt
     n = p.size
     p.mask_key = None; p.update_mask(); m = p.mask(); p.clearMask()
     img = QImage(n, n, QImage.Format_ARGB32); img.fill(0)
@@ -356,3 +355,106 @@ def test_the_busy_sign_is_red_and_its_text_reads_the_same_whichever_way_it_faces
     cy, r = -sign.height * 0.44, bw * 0.30
     x0, y0, w, h = int(sign.size / 2 - bw * 0.2), int(sign.feet + cy + r + 6), int(bw * 0.4), 8
     assert right.copy(x0, y0, w, h) == left.copy(x0, y0, w, h)
+
+
+# ---- which way the art looks, and turning round -------------------------------------------------------------------
+def looks_pets(tmp_path, make):
+    right = load_dir(write_pack(tmp_path / "r", id="r", nose=True, looks="right"))
+    left = load_dir(write_pack(tmp_path / "l", id="l", nose=True, looks="left"))            # same picture, but it says the art looks left
+    pets = {"mochi": MOCHI, "r": right, "l": left}
+    a, b = make("r", 1.0, pets), make("l", 1.0, pets)
+    for p in (a, b):
+        p.grounded, p.hot, p.squash, p.hearts, p.state, p.t = True, False, 0.0, [], State(), 10.0
+    return a, b
+
+
+def different_pixels(x, y):
+    return sum(1 for j in range(x.height()) for i in range(x.width()) if x.pixel(i, j) != y.pixel(i, j))
+
+
+def test_the_art_is_mirrored_so_that_it_always_looks_where_it_walks(qapp, tmp_path, make):
+    r, l = looks_pets(tmp_path, make)
+    r.facing = 1; l.facing = -1
+    assert different_pixels(render(r), render(l)) == 0                     # each walking the way its art looks: drawn as is
+    r.facing = -1; l.facing = 1
+    assert different_pixels(render(r), render(l)) == 0                     # ... and walking the other way: both mirrored
+    r.facing = 1
+    assert different_pixels(render(r), render(l)) > 500                    # (same direction, opposite art: really different)
+
+    def nose_x(img):                                                       # where the red nose is, horizontally
+        xs = [x for y in range(img.height()) for x in range(img.width())
+              if (c := img.pixelColor(x, y)).alpha() > 200 and c.red() > 170 and c.green() < 90]
+        return sum(xs) / len(xs)
+    r.facing = 1; right_nose = nose_x(render(r))
+    r.facing = -1; left_nose = nose_x(render(r))
+    assert right_nose > r.size / 2 + 10 and left_nose < r.size / 2 - 10    # the nose leads: right when walking right, left going left
+    assert abs((right_nose - r.size / 2) + (left_nose - r.size / 2)) < 2   # and the two are mirror images
+
+
+def test_the_click_mask_follows_the_mirroring(qapp, tmp_path, make):
+    r, l = looks_pets(tmp_path, make)
+    for p, f in ((r, 1), (l, -1), (r, -1), (l, 1)):
+        p.facing = f
+        left, edge = uncovered_and_clipped(p)
+        assert left < 40 and edge < 40
+
+
+def test_a_pack_says_which_way_it_looks_and_bad_values_are_refused(qapp, tmp_path):
+    assert load_dir(write_pack(tmp_path / "a", id="a")).pack.art == 1
+    assert load_dir(write_pack(tmp_path / "b", id="b", looks="left")).pack.art == -1
+    assert load_dir(write_pack(tmp_path / "c", id="c")).turn_s == 0.25 and load_dir(write_pack(tmp_path / "d", id="d", turn=0)).turn_s == 0
+    for bad in ("up", "", 1):
+        with pytest.raises(ValueError, match="looks"): load_dir(write_pack(tmp_path / "e", id="e", looks=bad))
+    for bad in (-1, 99, "slow"):
+        with pytest.raises(ValueError, match="turn"): load_dir(write_pack(tmp_path / "f", id="f", turn=bad))
+
+
+def walking_pet(make, tmp_path):
+    p = make("blob", 1.0)
+    g = p.screen_geo()
+    p.px, p.py, p.vx, p.vy, p.support = g.left + 400.0, floor_y(p), 0.0, 0.0, None
+    p.grounded = True; p.enter(State(Motion.WALK)); p.until = float("inf"); p.facing = 1; p.drawn_facing = 1
+    return p
+
+
+def test_turning_round_takes_a_moment_through_edge_on_and_it_does_not_walk_backwards(make, tmp_path):
+    p = walking_pet(make, tmp_path)
+    for _ in range(3): p.tick()
+    x0 = p.px; assert x0 > 400 and p.turn_scale() == 1.0                  # walking right at full width
+    p.facing = -1; p.tick()                                                # it decides to go the other way
+    assert p.turning() and 0.0 < p.turn_scale() <= 1.0
+    seen, xs = [], []
+    for _ in range(int(p.defn.turn_s / 0.033) + 1):
+        p.tick(); seen.append(p.turn_scale()); xs.append(p.px)
+    assert min(abs(v) for v in seen) < 0.35                                 # it passed through (nearly) edge-on
+    assert all(a == xs[0] for a in xs[:max(1, len(xs) - 2)])               # standing still while turning: no moonwalking
+    for _ in range(4): p.tick()
+    assert not p.turning() and p.turn_scale() == -1.0
+    x1 = p.px
+    for _ in range(10): p.tick()
+    assert p.px < x1                                                       # then it walks off to the left, facing left
+
+
+def test_turn_scale_is_monotonic_from_one_direction_to_the_other(make, tmp_path):
+    p = walking_pet(make, tmp_path)
+    p.tick(); p.facing = -1; p.tick()
+    vals = []
+    for _ in range(12):
+        p.t += p.defn.turn_s / 10; vals.append(p.turn_scale())
+    assert all(a >= b for a, b in zip(vals, vals[1:], strict=False)) and vals[-1] == -1.0 and vals[0] < 1.0
+
+
+def test_mochi_still_turns_at_once(pet):
+    pet.grounded = True; pet.enter(State(Motion.WALK)); pet.until = float("inf"); pet.tick()
+    pet.facing = -pet.facing; pet.tick()
+    assert not pet.turning() and pet.turn_scale() == float(pet.facing)
+
+
+def test_the_click_mask_covers_every_stage_of_a_turn(make, tmp_path):
+    p = walking_pet(make, tmp_path)
+    p.tick(); p.facing = -1; p.tick()
+    for k in range(12):
+        p.t = p.turn_start + p.defn.turn_s * k / 11
+        p.state, p.squash, p.hearts, p.hot = State(Motion.WALK), 0.0, [], False
+        left, edge = uncovered_and_clipped(p)
+        assert left < 40, (k, left)

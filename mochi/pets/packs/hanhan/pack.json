@@ -74,5 +74,7 @@
  "bob": 5,
  "drop": "Cái gì đây? {name}",
  "desktop_remark": "{name}... nằm chình ình ở đó làm gì?",
- "work_prop": "sign"
+ "work_prop": "sign",
+ "looks": "left",
+ "turn": 0.3
 }

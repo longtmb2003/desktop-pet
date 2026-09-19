@@ -35,6 +35,7 @@ class Pet(QWidget):
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.t = self.vy = self.squash = self.blink = 0.0
         self.facing, self.hearts = 1, []            # hearts: [x, y, life]
+        self.drawn_facing, self.turn_from, self.turn_start = 1, 1.0, -1e9      # turning round takes a moment: see turn_scale()
         self.wins, self.support, self.vx, self.grounded = {}, None, 0.0, False   # wins: id -> (x, y, w, h); support: id we stand on
         self.next_blink, self.moved, self.press, self.mask_key = 2.0, False, None, None
         self.paused, self.drag, self.shaken = False, DragTracker(), False
@@ -101,9 +102,25 @@ class Pet(QWidget):
         r = (QGuiApplication.screenAt(c) or QGuiApplication.primaryScreen()).availableGeometry()
         return Bounds(r.left(), r.top(), r.right(), r.bottom())
 
+    def turning(self):
+        return self.t - self.turn_start < self.defn.turn_s
+
+    def toward(self, target):
+        """where the horizontal factor is on its way to `target`: from `turn_from`, smoothly, over the turn's duration"""
+        if not self.turning(): return float(target)
+        u = (self.t - self.turn_start) / self.defn.turn_s
+        return self.turn_from + (target - self.turn_from) * u * u * (3 - 2 * u)
+
+    def turn_scale(self):
+        """the horizontal factor for how it faces: +1 right, -1 left, and in between while it turns round (through 0: edge-on)"""
+        return self.toward(self.drawn_facing) if self.turning() else float(self.facing)
+
     def tick(self):
         dt = min(self.clock.restart() / 1000, MAX_DT)
         self.t += dt
+        if self.facing != self.drawn_facing:                          # it changed direction: turn round (standing still) before going on
+            self.turn_from = self.toward(self.drawn_facing) if self.defn.turn_s else float(self.facing)
+            self.drawn_facing, self.turn_start = self.facing, self.t
         self.squash *= 0.85
         if self.t > self.next_blink:
             self.blink, self.next_blink = 0.15, self.t + random.uniform(2, 5)
@@ -432,6 +449,7 @@ class Pet(QWidget):
             self.enter(State(Motion.WALK, Expression.DIZZY) if dizzy else State())
 
     def chase(self, dt, g, cx, wid):
+        if self.turning(): return
         lo, hi = physics.span(self.wins, g, wid)
         dx = max(lo, min(hi, QCursor.pos().x())) - cx
         if abs(dx) < 45:
@@ -441,6 +459,7 @@ class Pet(QWidget):
         self.px += self.facing * 2 * self.walk_speed * self.cfg.speed * dt
 
     def walk(self, dt, g, cx, wid):
+        if self.turning(): return                                     # it doesn't shuffle sideways while turning round
         dizzy = self.state.expression is Expression.DIZZY
         step = self.facing * self.walk_speed * self.cfg.speed * (0.6 if self.hot else 1) * dt      # too hot to hurry
         if dizzy:                                                                # half speed, swaying, changing its mind

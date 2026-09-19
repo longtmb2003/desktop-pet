@@ -51,7 +51,7 @@ def hand(p, at):
     p.setPen(QPen(QColor(150, 105, 80), 1)); p.setBrush(SKIN); p.drawEllipse(at, 6.5, 6)
 
 
-def draw_prop(p, pk, bw, bh, t, facing):
+def draw_prop(p, pk, bw, bh, t, mirror):
     """what it holds while working: a red "no entry, busy" sign, or a laptop; both held by two hands with sleeves from the shoulders,
     so it is clearly gripped rather than floating in front of the body"""
     sx = bw * 0.27                                                                    # where the sleeves start: on the chest
@@ -68,7 +68,7 @@ def draw_prop(p, pk, bw, bh, t, facing):
         p.setPen(QPen(QColor(120, 20, 25), 1)); p.setBrush(RED)
         plaque = QRectF(-bw * 0.24, cy + r + 3, bw * 0.48, 15)
         p.drawRoundedRect(plaque, 3, 3)
-        p.save(); p.translate(plaque.center()); p.scale(facing, 1)                     # text must not come out mirrored
+        p.save(); p.translate(plaque.center()); p.scale(mirror, 1)                     # text must not come out mirrored
         f = p.font(); f.setBold(True); f.setPixelSize(11); p.setFont(f); p.setPen(Qt.white)
         p.drawText(QRectF(-plaque.width() / 2, -plaque.height() / 2, plaque.width(), plaque.height()), Qt.AlignCenter, "BẬN")
         p.restore()
@@ -123,7 +123,8 @@ def paint_sprite(pet, p):
         p.translate(0, -bw / 2); p.rotate(90 * pet.facing); p.translate(0, bh / 2)
     elif spin:
         p.translate(0, -bh / 2); p.rotate(spin); p.translate(0, bh / 2)
-    p.rotate(rot); p.scale(sx * pet.facing, sy)
+    mir = pet.turn_scale() * pk.art                                                        # -1 draws the art mirrored, 0 is edge-on
+    p.rotate(rot); p.scale(sx * mir, sy)
     rect = QRectF(-bw / 2, -bh, bw, bh)
     p.drawImage(rect, pk.body)
     p.save(); p.translate(rect.topLeft()); p.scale(bs, bs)                                # body pixels from here
@@ -134,7 +135,7 @@ def paint_sprite(pet, p):
         kind = face_kind(pet)
         p.drawImage(QRectF(bx, by, fw, fh), pk.face(kind, t))
     p.restore()
-    if s.action is Action.WORK: draw_prop(p, pk, bw, bh, t, pet.facing)
+    if s.action is Action.WORK: draw_prop(p, pk, bw, bh, t, 1 if mir >= 0 else -1)
     p.resetTransform(); p.scale(pet.scale, pet.scale); p.translate(d.size / 2, d.feet)    # extras: upright, not turned with the body
     if lying:
         f = p.font(); f.setBold(True)
@@ -162,7 +163,7 @@ def paint_sprite(pet, p):
 def _static(pet):
     s = pet.state
     still = s.motion is Motion.IDLE and s.action in (Action.NONE, Action.RANT, Action.YAWN)
-    return still and s.expression is Expression.NORMAL and not pet.hot and not pet.hearts and pet.squash < 0.03
+    return still and s.expression is Expression.NORMAL and not pet.hot and not pet.hearts and pet.squash < 0.03 and not pet.turning()
 
 
 def sprite_mask_key(pet):
@@ -179,10 +180,10 @@ def sprite_mask(pet):
     bs = d.height / pk.body.height()
     bw, bh, c = pk.body.width() * bs, d.height, d.size / 2
     if kind == "alpha":
-        key = (round(k, 3), pet.facing)
+        key = (round(k, 3), pet.facing * pk.art)
         if key not in pk.masks:
             img = pk.body.scaled(max(1, round(bw * k)), max(1, round(bh * k)), Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
-            if pet.facing < 0:                                           # (`flipped` needs Qt 6.9; older PySide6 has `mirrored`)
+            if pet.facing * pk.art < 0:                                  # (`flipped` needs Qt 6.9; older PySide6 has `mirrored`)
                 img = img.flipped(Qt.Horizontal) if hasattr(img, "flipped") else img.mirrored(True, False)
             outline = QRegion()
             for y in range(img.height()):                                # anything faintly visible (the antialiased edge) is clickable
