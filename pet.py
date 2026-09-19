@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Mochi: a tiny vector desktop pet. Left-drag to pick up, click to pet, right-click for menu."""
-import os, sys, math, random, json
+import os, sys, math, random, json, signal
 os.environ.setdefault("QT_QPA_PLATFORM", "xcb")  # Wayland forbids self-positioning; XWayland allows it
-from PySide6.QtCore import Qt, QTimer, QPointF, QRectF, QPoint, QObject, Slot, ClassInfo
+from PySide6.QtCore import Qt, QTimer, QPointF, QRectF, QPoint, QObject, Slot, ClassInfo, QSettings
 from PySide6.QtDBus import QDBusConnection, QDBusInterface
 from PySide6.QtGui import (QPainter, QColor, QPen, QBrush, QPainterPath, QGuiApplication,
                            QLinearGradient, QCursor, QRegion)
@@ -12,7 +12,13 @@ S, FEET = 160, 146                  # window size, y of the floor line inside th
 DUR = {"idle": (2, 5), "walk": (3, 8), "sleep": (8, 20), "happy": (1.4, 1.4)}  # seconds per state
 GRAVITY, WALK_SPEED = 1800, 55
 HEAD = 190                          # a window must be this far below the screen top to be stood on
-DARK, TAIL, EAR, PINK = QColor("#3b2a35"), QColor("#f6c3aa"), QColor("#f7cdb7"), QColor("#ffb3c1")
+THEMES = {  # body gradient top/bottom, ear, tail, inner ear, eye
+    "Kem":     dict(top="#fff4ea", bottom="#ffdcc8", ear="#f7cdb7", tail="#f6c3aa", inner="#ffb3c1", eye="#3b2a35"),
+    "Cam":     dict(top="#ffcf9e", bottom="#f5a25d", ear="#f0a466", tail="#ee9a55", inner="#ffb3c1", eye="#3b2a35"),
+    "Xám":     dict(top="#e6e8ee", bottom="#c3c7d2", ear="#b9bdc9", tail="#b0b4c1", inner="#ffc2cf", eye="#3b2a35"),
+    "Bạc hà":  dict(top="#e3f8ec", bottom="#b9e8cf", ear="#a6dcc0", tail="#9dd6b8", inner="#ffb3c1", eye="#3b2a35"),
+    "Hồng":    dict(top="#ffe8f0", bottom="#ffc2d6", ear="#ffb0c9", tail="#ffa6c1", inner="#ff8fb0", eye="#3b2a35"),
+}
 
 
 def heart(s):
@@ -44,6 +50,9 @@ class Pet(QWidget):
         self.facing, self.hearts = 1, []            # hearts: [x, y, life]
         self.wins, self.support, self.vx, self.grounded = {}, None, 0.0, False   # wins: id -> (x, y, w, h); support: id of the window we stand on
         self.next_blink, self.moved, self.press, self.mask_key = 2.0, False, None, None
+        self.cfg = QSettings("mochi-pet", "mochi")
+        self.theme = self.cfg.value("theme", "Kem")
+        if self.theme not in THEMES: self.theme = "Kem"
         g = self.screen_geo()
         self.px, self.py = random.uniform(g.left() + 80, g.right() - 240), g.top() - 100
         self.set_state("fall")
@@ -194,9 +203,18 @@ class Pet(QWidget):
 
     def contextMenuEvent(self, e):
         m = QMenu(self)
+        colors = m.addMenu("Màu")
+        for name in THEMES:
+            a = colors.addAction(name)
+            a.setCheckable(True); a.setChecked(name == self.theme)
+            a.triggered.connect(lambda _, n=name: self.set_theme(n))
         m.addAction("Ngủ", lambda: self.set_state("sleep"))
         m.addAction("Thoát", QApplication.quit)
         m.exec(e.globalPos())
+
+    def set_theme(self, name):
+        self.theme = name
+        self.cfg.setValue("theme", name)
 
     # ---- drawing ---------------------------------------------------------
     def paintEvent(self, _):
@@ -205,6 +223,8 @@ class Pet(QWidget):
         p.translate(S / 2, FEET)
         t, st = self.t, self.state
         up = st in ("fall", "drag")
+        th = THEMES[self.theme]
+        DARK, TAIL, EAR, PINK = (QColor(th[k]) for k in ("eye", "tail", "ear", "inner"))
         if self.grounded:                                                          # shadow only when standing
             p.setPen(Qt.NoPen); p.setBrush(QColor(0, 0, 0, 38)); p.drawEllipse(QPointF(0, 1), 46, 6)
 
@@ -244,7 +264,7 @@ class Pet(QWidget):
 
         # body
         g = QLinearGradient(0, -80, 0, -4)
-        g.setColorAt(0, QColor("#fff4ea")); g.setColorAt(1, QColor("#ffdcc8"))
+        g.setColorAt(0, QColor(th["top"])); g.setColorAt(1, QColor(th["bottom"]))
         p.setPen(Qt.NoPen); p.setBrush(QBrush(g)); p.drawEllipse(QRectF(-47, -80, 94, 76))
 
         # face
@@ -285,5 +305,6 @@ class Pet(QWidget):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    signal.signal(signal.SIGTERM, lambda *_: app.quit())   # `mochi off` -> clean exit (unloads the KWin script)
     pet = Pet(); pet.show()
     sys.exit(app.exec())

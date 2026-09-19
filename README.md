@@ -7,7 +7,8 @@
 - Kéo thả để nhấc lên, thả ra thì rơi; bấm vào thì nhảy lên và bay trái tim
 - Đứng và đi trên đỉnh các cửa sổ (đi theo khi bạn kéo cửa sổ), thỉnh thoảng nhảy lên cửa sổ gần đó
 - Click xuyên qua phần trong suốt quanh pet
-- Chuột phải: Ngủ / Thoát
+- 5 màu (Kem, Cam, Xám, Bạc hà, Hồng): chuột phải → Màu, được nhớ cho lần chạy sau
+- Chuột phải: Màu / Ngủ / Thoát
 
 ## Chạy
 
