@@ -1,12 +1,14 @@
 """The pet widget: what it does next, per-frame physics, and mouse input."""
+import math
 import random
+import time
 
 from PySide6.QtCore import QElapsedTimer, QPoint, Qt, QTimer
 from PySide6.QtGui import QCursor, QGuiApplication, QPainter
 from PySide6.QtWidgets import QApplication, QMenu, QWidget
 
 from . import autostart, physics
-from .physics import FEET, GRAVITY, S, WALK_SPEED, Bounds
+from .physics import FEET, S, THROW_MIN, WALK_SPEED, Bounds, DragTracker
 from .renderer import THEMES, paint, silhouette
 from .settings import Settings
 from .state import Action, Expression, Motion, State, after, ends_at
@@ -24,7 +26,7 @@ class Pet(QWidget):
         self.facing, self.hearts = 1, []            # hearts: [x, y, life]
         self.wins, self.support, self.vx, self.grounded = {}, None, 0.0, False   # wins: id -> (x, y, w, h); support: id we stand on
         self.next_blink, self.moved, self.press, self.mask_key = 2.0, False, None, None
-        self.paused = False
+        self.paused, self.drag = False, DragTracker()
         self.cfg = settings or Settings()
         self.theme = self.cfg.theme
         g = self.screen_geo()
@@ -66,17 +68,17 @@ class Pet(QWidget):
             riding = wid is not None and wid == self.support and self.vy >= 0   # already standing on this window
             if riding:
                 self.py = floor                                    # ride it while it moves
-            elif self.py < floor - 0.5 or self.vy < 0:             # airborne
+            elif self.py < floor - 0.5 or self.vy < 0 or (self.state.motion is Motion.AIRBORNE and self.vx != 0):   # airborne
                 self.grounded = False
-                self.vy += GRAVITY * dt
-                self.py += self.vy * dt
-                self.px = max(g.left - 40, min(g.right - S + 40, self.px + self.vx * dt))
-                if self.py >= floor:
-                    self.py, self.vy, self.vx, self.squash, self.support, self.grounded = floor, 0.0, 0.0, 0.3, wid, True
-                    if self.state.motion is Motion.AIRBORNE:
-                        self.enter(State())
+                f = physics.step_air(self.px, self.py, self.vx, self.vy, dt, floor, g)
+                self.px, self.py, self.vx, self.vy = f.x, f.y, f.vx, f.vy
+                if f.hit: self.squash = 0.3
+                if f.landed:
+                    self.support, self.grounded = wid, True
+                    self.land()
             else:
                 self.support, riding = wid, True
+                self.land()
             if riding:                                             # on the floor or a window: free to move
                 self.grounded = True
                 if self.state.motion is Motion.WALK:
@@ -89,6 +91,17 @@ class Pet(QWidget):
             self.move(int(self.px), int(self.py))
         self.update_mask()
         self.update()
+
+    def throw(self, vx, vy):
+        """let go of the pet: a fast enough mouse movement carries over as velocity, otherwise it just drops"""
+        if math.hypot(vx, vy) < THROW_MIN: vx = vy = 0.0
+        self.vx, self.vy = vx, vy
+        self.enter(State(Motion.AIRBORNE))
+
+    def land(self):
+        """the pet came to rest on a surface: an AIRBORNE fall ends (a walker that hopped keeps walking)"""
+        if self.state.motion is Motion.AIRBORNE:
+            self.enter(State())
 
     def chase(self, dt, g, cx, wid):
         lo, hi = physics.span(self.wins, g, wid)
@@ -131,6 +144,7 @@ class Pet(QWidget):
         if e.button() != Qt.LeftButton: return
         g = e.globalPosition().toPoint()
         self.press, self.moved, self.off = g, False, g - self.pos()
+        self.drag.reset(); self.drag.add(time.monotonic(), g.x(), g.y())
 
     def mouseMoveEvent(self, e):
         if self.press is None: return
@@ -140,6 +154,7 @@ class Pet(QWidget):
             self.support, self.vx = None, 0.0
             self.enter(State(Motion.DRAG))
         if self.moved:
+            self.drag.add(time.monotonic(), g.x(), g.y())
             p = g - self.off
             self.px, self.py, self.vy = p.x(), p.y(), 0.0
             self.move(p)
@@ -148,7 +163,7 @@ class Pet(QWidget):
         if self.press is None: return
         self.press = None
         if self.moved:
-            self.enter(State(Motion.AIRBORNE))
+            self.throw(*self.drag.velocity(time.monotonic()))
         else:                                                # a click = a pet
             self.enter(State(expression=Expression.HAPPY))
             self.vy = -420

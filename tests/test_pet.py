@@ -1,3 +1,5 @@
+import pytest
+
 from mochi.physics import FEET, S
 from mochi.pet import MAX_DT
 from mochi.state import Motion, State
@@ -98,3 +100,70 @@ def test_pause_freezes_and_resume_does_not_count_the_pause(pet):
     pet.set_paused(False)
     assert not pet.paused and pet.timer.isActive()
     pet.timer.stop()
+
+
+# ---- throwing ---------------------------------------------------------------------------------------------
+from mochi.physics import THROW_MIN, WALL_PAD  # noqa: E402
+
+
+def in_air(pet, x, y, vx, vy):
+    pet.px, pet.py, pet.vx, pet.vy, pet.support = x, y, vx, vy, None
+    pet.enter(State(Motion.AIRBORNE))
+
+
+def settle(pet, frames=2400):
+    for i in range(frames):
+        pet.tick()
+        if pet.state.motion is not Motion.AIRBORNE:
+            return i
+    raise AssertionError("still airborne")
+
+
+def test_throw_below_threshold_is_a_plain_drop(pet):
+    pet.throw(THROW_MIN - 1, 0)
+    assert (pet.vx, pet.vy) == (0.0, 0.0) and pet.state.motion is Motion.AIRBORNE
+
+
+def test_throw_above_threshold_keeps_velocity(pet):
+    pet.throw(900, -400)
+    assert (pet.vx, pet.vy) == (900, -400)
+
+
+def test_thrown_pet_stays_on_screen_and_settles(pet):
+    g = pet.screen_geo()
+    in_air(pet, g.left + 100, g.top + 100, 2600, -300)
+    for _ in range(2400):
+        pet.tick()
+        assert g.left - WALL_PAD <= pet.px <= g.right - S + WALL_PAD
+        if pet.state.motion is not Motion.AIRBORNE: break
+    assert pet.state.motion is Motion.IDLE and pet.py == floor_y(pet) and (pet.vx, pet.vy) == (0.0, 0.0)
+
+
+def test_pet_thrown_sideways_along_the_floor_still_lands(pet):
+    g = pet.screen_geo()
+    in_air(pet, g.left + 100, floor_y(pet), 800, 0)                # exactly on the floor: used to hang in AIRBORNE forever
+    settle(pet)
+    assert pet.state.motion is Motion.IDLE
+
+
+def test_dropped_exactly_on_the_floor_lands(pet):
+    in_air(pet, pet.screen_geo().left + 100, floor_y(pet), 0, 0)
+    pet.tick()
+    assert pet.state.motion is Motion.IDLE
+
+
+def test_release_uses_the_drag_history(pet, monkeypatch):
+    import mochi.pet as mp
+    now = [100.0]
+    monkeypatch.setattr(mp.time, "monotonic", lambda: now[0])
+    from PySide6.QtCore import QEvent, QPointF, Qt
+    from PySide6.QtGui import QMouseEvent
+
+    def ev(kind, x, y):
+        return QMouseEvent(kind, QPointF(x, y), QPointF(x, y), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
+    pet.mousePressEvent(ev(QEvent.MouseButtonPress, 100, 100))
+    for i in range(1, 6):                                         # 1000 px/s to the right, sampled every 20 ms
+        now[0] += 0.02
+        pet.mouseMoveEvent(ev(QEvent.MouseMove, 100 + 20 * i, 100))
+    pet.mouseReleaseEvent(ev(QEvent.MouseButtonRelease, 200, 100))
+    assert pet.state.motion is Motion.AIRBORNE and pet.vx == pytest.approx(1000) and pet.vy == pytest.approx(0)
