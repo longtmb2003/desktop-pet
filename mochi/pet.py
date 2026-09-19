@@ -8,7 +8,7 @@ from PySide6.QtCore import QElapsedTimer, QPoint, Qt, QTimer
 from PySide6.QtGui import QCursor, QGuiApplication, QPainter, QTransform
 from PySide6.QtWidgets import QApplication, QMenu, QWidget
 
-from . import autostart, monitor, physics
+from . import autostart, modes, monitor, physics
 from . import reminders as rem
 from .bubble import SpeechBubble
 from .pomodoro import Pomodoro
@@ -136,8 +136,7 @@ class Pet(QWidget):
                         self.walk(dt, g, cx, wid)                           # (a PUSH stands still)
             if self.t > self.until:
                 edge = self.facing if self.state.action is Action.PUSH else 0
-                nxt = after(self.state, hour=self.hour(), chase=self.cfg.chase, weights=self.defn.behaviors)
-                self.enter(State(action=Action.WORK) if self.pomo.focusing and self.grounded else nxt)   # focus: back to the laptop
+                self.enter(self.next_state())
                 if edge: self.facing = -edge                                # after shoving the edge, never walk straight back into it
             self.move(int(self.px), int(self.py))
         if self.pomo.active: self.pomodoro_event(self.pomo.poll())
@@ -163,6 +162,73 @@ class Pet(QWidget):
         pd = self.pets.get(self.cfg.pet, self.defn)
         if pd is not self.defn or self.cfg.scale != self.scale: self.change_pet(pd, self.cfg.scale)
         self.retune()
+
+    # ---- modes -----------------------------------------------------------
+    def mode(self):
+        """the active Mode (Bình thường if the saved one no longer exists)"""
+        m = modes.available(self.cfg.custom_modes)
+        return m.get(self.cfg.mode) or m["normal"]
+
+    def stay_state(self):
+        """what the active mode or a Pomodoro focus keeps the pet doing, or None"""
+        if not self.grounded: return None
+        stay = self.mode().stay
+        if self.pomo.focusing or stay == "work": return State(action=Action.WORK)
+        if stay == "sleep" and self.t - self.last_touch > 20: return State(Motion.SLEEP)       # (not right after being played with)
+        return None
+
+    def next_state(self):
+        """the state after the current one runs out"""
+        return self.stay_state() or after(self.state, hour=self.hour(), chase=self.cfg.chase,
+                                          weights=modes.weights(self.defn.behaviors, self.mode().boost))
+
+    def find_mode(self, key):
+        """a mode id from an id or a name (any case), or None"""
+        all_ = modes.available(self.cfg.custom_modes)
+        key = str(key).strip()
+        return key if key in all_ else next((i for i, m in all_.items() if m.name.lower() == key.lower()), None)
+
+    def set_mode(self, key):
+        """switch mode: apply its settings, and keep the pet at what it asks for. False if there is no such mode"""
+        mid = self.find_mode(key)
+        if mid is None: return False
+        m = modes.available(self.cfg.custom_modes)[mid]
+        for k, v in m.values.items(): setattr(self.cfg, k, v)
+        self.cfg.mode = mid
+        self.apply_settings()
+        if getattr(self, "dialog", None) is not None: self.dialog.reload()
+        if self.state.motion in (Motion.IDLE, Motion.WALK, Motion.SLEEP) and (s := self.stay_state()): self.enter(s)
+        self.say(f"Chế độ: {m.name}", urgent=True)
+        return True
+
+    def save_mode(self, name):
+        """keep the current settings as a mode of the user's own, and switch to it; ValueError if the name is empty"""
+        current = {k: getattr(self.cfg, k) for k in modes.KEYS}
+        new = modes.snapshot(name, current, self.mode())
+        mine = {i: m for i, m in modes.available(self.cfg.custom_modes).items() if not m.builtin}
+        if new.id not in mine and len(mine) >= modes.MAX_CUSTOM: raise ValueError(f"at most {modes.MAX_CUSTOM} modes of your own")
+        mine[new.id] = new
+        self.cfg.custom_modes = modes.dump_custom(mine); self.cfg.mode = new.id
+        if getattr(self, "dialog", None) is not None: self.dialog.reload()
+        return new
+
+    def delete_mode(self, mid):
+        mine = {i: m for i, m in modes.available(self.cfg.custom_modes).items() if not m.builtin}
+        if mid not in mine: return False
+        del mine[mid]
+        self.cfg.custom_modes = modes.dump_custom(mine)
+        if self.cfg.mode == mid: self.cfg.mode = "normal"                     # the settings stay as they are; only the label goes
+        if getattr(self, "dialog", None) is not None: self.dialog.reload()
+        return True
+
+    def ask_mode_name(self):
+        from PySide6.QtWidgets import QInputDialog
+        name, ok = QInputDialog.getText(self, "Lưu chế độ", "Tên chế độ mới (lưu các cài đặt hiện tại):")
+        if ok and name.strip():
+            try:
+                self.save_mode(name)
+            except ValueError as e:
+                self.say(str(e), urgent=True)
 
     def check_reminders(self):
         """once a second: say whatever reminders have come due (held back while a fullscreen app has Quiet Mode on)"""
@@ -369,6 +435,17 @@ class Pet(QWidget):
         if self.pomo.active: pm.addAction("Đặt lại", self.pomo.reset)
         a = m.addAction("Chế độ yên lặng"); a.setCheckable(True); a.setChecked(self.cfg.quiet)
         a.toggled.connect(lambda on: (setattr(self.cfg, "quiet", on), self.apply_settings()))
+        mm = m.addMenu("Chế độ")
+        all_ = modes.available(self.cfg.custom_modes)
+        for mid, md in all_.items():
+            a = mm.addAction(md.name); a.setCheckable(True); a.setChecked(mid == self.mode().id)
+            a.triggered.connect(lambda _, i=mid: self.set_mode(i))
+        mm.addSeparator()
+        mm.addAction("Lưu cài đặt hiện tại thành chế độ...", self.ask_mode_name)
+        mine = [md for md in all_.values() if not md.builtin]
+        if mine:
+            rm = mm.addMenu("Xoá chế độ của tôi")
+            for md in mine: rm.addAction(md.name, lambda i=md.id: self.delete_mode(i))
         m.addAction("Nhắc việc...", self.open_reminders)
         m.addAction("Cài đặt...", self.open_settings)
         if len(self.pets) > 1:

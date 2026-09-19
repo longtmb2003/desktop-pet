@@ -1,8 +1,8 @@
 """The Settings window. Every control writes to Settings and takes effect immediately; there is no OK/Apply."""
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSignalBlocker, Qt
 from PySide6.QtWidgets import QCheckBox, QComboBox, QDialog, QFormLayout, QHBoxLayout, QLabel, QPushButton, QSlider, QSpinBox, QVBoxLayout
 
-from . import autostart, monitor
+from . import autostart, modes, monitor
 from .renderer import THEMES
 
 
@@ -11,6 +11,7 @@ def _percent_slider(value, on_change, lo=30, hi=300):
     label = QLabel(f"{s.value()}%")
     s.valueChanged.connect(lambda v: (label.setText(f"{v}%"), on_change(v / 100)))
     row = QHBoxLayout(); row.addWidget(s); row.addWidget(label)
+    s.label = label
     return row, s
 
 
@@ -22,6 +23,9 @@ class SettingsDialog(QDialog):
         lay, form = QVBoxLayout(self), QFormLayout()
         lay.addLayout(form)
 
+        self.mode = QComboBox(); self.fill_modes()
+        self.mode.currentIndexChanged.connect(lambda _: self.choose_mode(self.mode.currentData()))
+        form.addRow("Chế độ", self.mode)
         self.who = QComboBox()
         for pid, d in pet.pets.items(): self.who.addItem(d.name, pid)
         self.who.setCurrentIndex(max(0, self.who.findData(pet.defn.id)))
@@ -58,6 +62,27 @@ class SettingsDialog(QDialog):
         back = QPushButton("Gọi Mochi về / đặt lại vị trí"); back.clicked.connect(pet.bring_back)
         lay.addWidget(back)
         self.back = back
+
+    def choose_mode(self, mid):
+        self.pet.set_mode(mid)
+        self.reload()                                             # its settings replace what the controls show
+
+    def fill_modes(self):
+        with QSignalBlocker(self.mode):
+            self.mode.clear()
+            for mid, m in modes.available(self.cfg.custom_modes).items(): self.mode.addItem(m.name, mid)
+            self.mode.setCurrentIndex(max(0, self.mode.findData(self.cfg.mode)))
+
+    def reload(self):
+        """show the current settings (a mode was switched, or saved, from the menu while this window was open)"""
+        c = self.cfg
+        self.fill_modes()
+        for w, v in ((self.speed, round(c.speed * 100)), (self.activity, round(c.activity * 100)), (self.size, round(c.scale * 100)),
+                     (self.focus, c.focus_min), (self.rest, c.break_min)):
+            with QSignalBlocker(w): w.setValue(v)
+            if hasattr(w, "label"): w.label.setText(f"{v}%")
+        for k, b in self.boxes.items():
+            with QSignalBlocker(b): b.setChecked(bool(getattr(c, k)))
 
     @staticmethod
     def box(text, on, slot):
