@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """Mochi: a tiny vector desktop pet. Left-drag to pick up, click to pet, right-click for menu."""
-import os, sys, math, random, json, signal
+import os, sys, math, random, json, signal, logging
 os.environ.setdefault("QT_QPA_PLATFORM", "xcb")  # Wayland forbids self-positioning; XWayland allows it
-from PySide6.QtCore import Qt, QTimer, QPointF, QRectF, QPoint, QObject, Slot, ClassInfo, QSettings
-from PySide6.QtDBus import QDBusConnection, QDBusInterface
+from PySide6.QtCore import Qt, QTimer, QPointF, QRectF, QPoint, QObject, Slot, ClassInfo, QSettings, QElapsedTimer
+from PySide6.QtDBus import QDBusConnection, QDBusInterface, QDBusMessage
 from PySide6.QtGui import (QPainter, QColor, QPen, QBrush, QPainterPath, QGuiApplication,
                            QLinearGradient, QCursor, QRegion)
 from PySide6.QtWidgets import QApplication, QWidget, QMenu
 
+log = logging.getLogger("mochi")
 S, FEET = 160, 146                  # window size, y of the floor line inside the window
 DUR = {"idle": (2, 5), "walk": (3, 8), "sleep": (8, 20), "happy": (1.4, 1.4),      # seconds per state
        "yawn": (1.8, 1.8), "stretch": (2.4, 2.4), "groom": (3, 4.5), "chase": (5, 9)}
 GRAVITY, WALK_SPEED = 1800, 55
+MAX_DT = 0.05                       # cap one frame's time step so a stall can't launch the pet through a window
 HEAD = 190                          # a window must be this far below the screen top to be stood on
 THEMES = {  # body gradient top/bottom, ear, tail, inner ear, eye
     "Kem":     dict(top="#fff4ea", bottom="#ffdcc8", ear="#f7cdb7", tail="#f6c3aa", inner="#ffb3c1", eye="#3b2a35"),
@@ -29,6 +31,20 @@ def heart(s):
     return p
 
 
+def parse_windows(js):
+    """kwin.js payload '[[id, x, y, w, h], ...]' -> {id: (x, y, w, h)}.
+    Malformed entries are skipped; a payload that isn't a list raises ValueError/TypeError (rejected whole)."""
+    wins = {}
+    for e in json.loads(js):
+        try:
+            i, x, y, w, h = e
+            if all(isinstance(v, (int, float)) and math.isfinite(v) for v in (x, y, w, h)) and w > 0 and h > 0:
+                wins[i] = (x, y, w, h)
+        except (ValueError, TypeError):
+            pass
+    return wins
+
+
 @ClassInfo({"D-Bus Interface": "org.mochi.Pet"})
 class Bus(QObject):
     """Receives window rects pushed by kwin.js (Wayland won't let a normal app list other windows)."""
@@ -38,7 +54,10 @@ class Bus(QObject):
 
     @Slot(str)
     def windows(self, js):
-        self.pet.wins = {i: (x, y, w, h) for i, x, y, w, h in json.loads(js)}
+        try:
+            self.pet.wins = parse_windows(js)
+        except (ValueError, TypeError) as e:       # anyone on the session bus can call us; keep the last good list
+            log.warning("ignored bad window payload: %s", e)
 
 
 class Pet(QWidget):
@@ -57,23 +76,36 @@ class Pet(QWidget):
         g = self.screen_geo()
         self.px, self.py = random.uniform(g.left() + 80, g.right() - 240), g.top() - 100
         self.set_state("fall")
+        self.clock = QElapsedTimer(); self.clock.start()   # real frame time, see tick()
         self.timer = QTimer(self, interval=33, timeout=self.tick)
         self.timer.start()
         self.bus = Bus(self)
         sb = QDBusConnection.sessionBus()
-        sb.registerService("org.mochi.Pet")
-        sb.registerObject("/pet", self.bus, QDBusConnection.ExportAllSlots)
-        self.load_kwin_script(sb)
+        if not sb.isConnected():
+            log.warning("no session bus: walking on the screen floor only")
+        elif not sb.registerService("org.mochi.Pet"):
+            sys.exit("mochi: already running (org.mochi.Pet is taken)")
+        else:
+            sb.registerObject("/pet", self.bus, QDBusConnection.ExportAllSlots)
+            self.load_kwin_script(sb)
 
     def load_kwin_script(self, sb):
         # ponytail: KDE only; elsewhere the pet just walks on the screen floor
         kw = QDBusInterface("org.kde.KWin", "/Scripting", "org.kde.kwin.Scripting", sb)
-        if not kw.isValid(): return
-        kw.call("unloadScript", "mochi")
+        if not kw.isValid():
+            log.info("KWin not available: walking on the screen floor only")
+            return
+        kw.call("unloadScript", "mochi")                       # a crashed run may have left it loaded
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "kwin.js")
-        sid = kw.call("loadScript", path, "mochi").arguments()[0]
-        QDBusInterface("org.kde.KWin", f"/Scripting/Script{sid}", "org.kde.kwin.Script", sb).call("run")
+        r = kw.call("loadScript", path, "mochi")
+        args = r.arguments()
+        if r.type() == QDBusMessage.MessageType.ErrorMessage or not args or args[0] < 0:
+            log.error("KWin loadScript failed: %s", r.errorMessage() or args)
+            return
         QApplication.instance().aboutToQuit.connect(lambda: kw.call("unloadScript", "mochi"))
+        r = QDBusInterface("org.kde.KWin", f"/Scripting/Script{args[0]}", "org.kde.kwin.Script", sb).call("run")
+        if r.type() == QDBusMessage.MessageType.ErrorMessage:
+            log.error("KWin script run failed: %s", r.errorMessage())
 
     # ---- behaviour -------------------------------------------------------
     def pick_next(self):
@@ -94,7 +126,7 @@ class Pet(QWidget):
         return (QGuiApplication.screenAt(c) or QGuiApplication.primaryScreen()).availableGeometry()
 
     def tick(self):
-        dt = 0.033
+        dt = min(self.clock.restart() / 1000, MAX_DT)
         self.t += dt
         self.squash *= 0.85
         if self.t > self.next_blink:
@@ -339,6 +371,8 @@ class Pet(QWidget):
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    signal.signal(signal.SIGTERM, lambda *_: app.quit())   # `mochi off` -> clean exit (unloads the KWin script)
+    logging.basicConfig(level=logging.INFO, format="%(name)s: %(levelname)s: %(message)s")
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(sig, lambda *_: app.quit())          # `mochi off` / Ctrl-C -> clean exit (unloads the KWin script)
     pet = Pet(); pet.show()
     sys.exit(app.exec())
