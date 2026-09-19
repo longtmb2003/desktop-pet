@@ -197,14 +197,12 @@ def test_a_mode_that_never_held_it_does_not_disturb_what_it_is_doing(floor):
     floor.set_mode("normal"); assert floor.state == State(action=Action.GROOM)
 
 
-def test_a_pomodoro_or_a_scheduled_nap_still_holds_it_when_the_mode_lets_go(floor):
+def test_a_pomodoro_still_holds_it_when_the_mode_lets_go(floor):
     floor.set_mode("work"); floor.start_focus(25)
     floor.set_mode("normal")
     assert floor.state == State(action=Action.WORK)                              # the Pomodoro carries on
-    floor.pomo.reset(); floor.set_mode("sleep")
-    floor.now_time = lambda: __import__("datetime").time(12, 30)                 # and it is nap time
-    floor.set_mode("normal")
-    assert floor.state == State(Motion.SLEEP)
+    floor.pomo_reset()
+    assert floor.state.action is not Action.WORK                                 # and lets go when it ends
 
 
 def test_leaving_a_mode_from_the_dialog_does_the_same(floor):
@@ -238,3 +236,46 @@ def test_the_pomodoro_menu_uses_the_synchronised_actions(floor):
     sub = next(a.menu() for a in floor.build_menu().actions() if a.text() == "Pomodoro")
     sub.actions()[1].trigger()                                                    # "Tiếp tục"
     assert floor.state == State(action=Action.WORK)
+
+
+# ---- choosing a mode at nap time or at night ------------------------------------------------------------------------
+def at(pet, h, m=0):
+    from datetime import time
+    pet.now_time = lambda: time(h, m)
+    pet.check_sleep()
+
+
+@pytest.mark.parametrize("mode,expected", [("play", None), ("work", State(action=Action.WORK)), ("normal", None)])
+def test_choosing_a_wakeful_mode_wakes_it_from_the_scheduled_sleep_and_it_stays_awake(floor, mode, expected):
+    at(floor, 23, 0); assert floor.state == State(Motion.SLEEP) and floor.sleeping_for == "night"
+    floor.set_mode(mode)
+    assert floor.state.motion is not Motion.SLEEP                                # awake at once, not "stuck" asleep
+    if expected: assert floor.state == expected
+    for _ in range(5):                                                           # and the schedule doesn't put it back to sleep
+        floor.until = 0.0; floor.t += 30; floor.next_check = 0.0; floor.tick(); landed_(floor)
+        assert floor.state.motion is not Motion.SLEEP
+
+
+def landed_(p):
+    p.vy, p.py, p.grounded = 0.0, p.screen_geo().bottom + 1 - p.feet, True
+
+
+def test_the_cancelled_sleep_comes_back_with_the_next_window(floor):
+    at(floor, 12, 30); assert floor.state == State(Motion.SLEEP)                 # the midday nap
+    floor.set_mode("play"); assert floor.state.motion is not Motion.SLEEP
+    at(floor, 13, 45); assert floor.woken_for == ""                              # the nap is over: nothing left to cancel
+    at(floor, 22, 30); landed_(floor); floor.enter(State()); floor.t += 60; floor.check_sleep()
+    assert floor.state == State(Motion.SLEEP)                                    # tonight it sleeps as usual
+
+
+def test_choosing_the_sleep_mode_still_sleeps_and_a_lock_still_wins(floor):
+    at(floor, 23, 0); floor.set_mode("play"); assert floor.state.motion is not Motion.SLEEP
+    floor.set_mode("sleep"); assert floor.state == State(Motion.SLEEP)
+    floor.set_mode("play"); landed_(floor)
+    floor.on_lock(True); assert floor.state == State(Motion.SLEEP)               # a locked screen is not a schedule: it still sleeps
+
+
+def test_switching_mode_in_the_afternoon_does_not_cancel_tonights_sleep(floor):
+    floor.set_mode("play")                                                       # 15:00: no window, nothing to cancel
+    assert floor.woken_for == ""
+    at(floor, 22, 30); assert floor.state == State(Motion.SLEEP)

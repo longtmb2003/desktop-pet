@@ -56,6 +56,7 @@ class Pet(QWidget):
         self.last_touch, self.now_hour = -1e9, lambda: datetime.now().hour      # local time zone; tests replace now_hour
         self.now_time = lambda: datetime.now().time()
         self.locked = self.suspended = False                                    # told by the PowerWatcher (power.py)
+        self.woken_for = ""                                                      # a scheduled sleep the user cancelled by choosing a mode
         self.sleeping_for, self.power = "", None                                # why it fell asleep by itself: "system" | "nap" | "night"
         self.bubble, self.fullscreen = SpeechBubble(), False    # fullscreen: pushed by the platform (kwin.js)
         self.next_chat = random.uniform(60, 180)
@@ -179,7 +180,8 @@ class Pet(QWidget):
     def sleep_reason(self):
         """why it should be asleep now: "system" (screen locked / computer sleeping), "nap", "night", or "" (awake)"""
         if self.cfg.sleep_system and (self.locked or self.suspended): return "system"
-        return sleep.scheduled(self.now_time(), self.cfg)
+        r = sleep.scheduled(self.now_time(), self.cfg)
+        return "" if r == self.woken_for else r                               # (switching to a wakeful mode cancels this window's sleep)
 
     def attach_power(self, watcher):
         self.power = watcher
@@ -195,6 +197,7 @@ class Pet(QWidget):
     def check_sleep(self):
         """put it to sleep when it should be, and wake it (yawn, greeting) when the reason has passed. Sleep it chose itself only:
         one you asked for from the menu is left alone"""
+        if self.woken_for and sleep.scheduled(self.now_time(), self.cfg) != self.woken_for: self.woken_for = ""      # that window is over
         reason = self.sleep_reason()
         if reason:
             if self.sleeping_for and self.state.motion is Motion.SLEEP: self.sleeping_for = reason        # (say, a nap began while locked)
@@ -240,6 +243,7 @@ class Pet(QWidget):
         mid = self.find_mode(key)
         if mid is None: return False
         m, old = modes.available(self.cfg.custom_modes)[mid], self.mode()
+        if m.stay != "sleep": self.woken_for = sleep.scheduled(self.now_time(), self.cfg)      # asking for a mode wakes it, even at night
         for k, v in m.values.items(): setattr(self.cfg, k, v)
         self.cfg.mode = mid
         self.apply_settings()
@@ -247,7 +251,8 @@ class Pet(QWidget):
         if self.state.motion in (Motion.IDLE, Motion.WALK, Motion.SLEEP):
             s = self.stay_state()
             if s: self.enter(s)
-            elif (old.stay == "work" and self.state.action is Action.WORK) or (old.stay == "sleep" and self.state.motion is Motion.SLEEP):
+            elif ((old.stay == "work" and self.state.action is Action.WORK)
+                  or (self.state.motion is Motion.SLEEP and (old.stay == "sleep" or self.sleeping_for in ("nap", "night")))):
                 self.release_stay()                                          # the old mode held it there: it is free now, at once
         self.say(f"Chế độ: {m.name}", urgent=True)
         return True
