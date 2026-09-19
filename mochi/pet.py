@@ -5,7 +5,7 @@ import time
 from datetime import datetime
 
 from PySide6.QtCore import QElapsedTimer, QFileSystemWatcher, QPoint, Qt, QTimer, QUrl
-from PySide6.QtGui import QCursor, QDesktopServices, QGuiApplication, QPainter, QTransform
+from PySide6.QtGui import QCursor, QGuiApplication, QPainter, QTransform
 from PySide6.QtWidgets import QApplication, QMenu, QWidget
 
 from . import autostart, desktop, modes, monitor, physics, sleep
@@ -342,13 +342,6 @@ class Pet(QWidget):
             self.enter(State(expression=Expression.HAPPY)); self.vy = -320
             self.hearts += [[random.uniform(-30, 30), 11 - self.defn.height, 1.2 + random.random() * .5] for _ in range(3)]
 
-    def open_desktop_item(self, path):
-        """open one of the things on the desktop, as if it had been double-clicked (only what is really on the desktop)"""
-        if not desktop.is_on_desktop(path): return False
-        self.say(f"Mở {desktop.entry_name(path)} nhé!", urgent=True)
-        if self.grounded and self.state.motion in (Motion.IDLE, Motion.WALK): self.vy = -320
-        return QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
-
     def check_reminders(self):
         """once a second: say whatever reminders have come due (held back while a fullscreen app has Quiet Mode on)"""
         self.pending += self.sched.due()
@@ -566,10 +559,6 @@ class Pet(QWidget):
             rm = mm.addMenu("Xoá chế độ của tôi")
             for md in mine: rm.addAction(md.name, lambda i=md.id: self.delete_mode(i))
         m.addAction("Nhắc việc...", self.open_reminders)
-        items = self.desktop_items()
-        if items:
-            dm = m.addMenu("Mở từ màn hình nền")
-            for path, name in items[:30]: dm.addAction(name, lambda p=path: self.open_desktop_item(p))
         m.addAction("Cài đặt...", self.open_settings)
         if len(self.pets) > 1:
             who = m.addMenu("Nhân vật")

@@ -28,9 +28,9 @@
 - Chế độ yên lặng: không nói vu vơ, không âm thanh, giảm tốc độ vẽ khi đứng yên. Tự bật khi có ứng dụng toàn màn hình (KDE), tắt được trong Cài đặt
 - Nhắc việc do bạn tự đặt: lặp lại sau mỗi N phút ("Uống nước đi!") hoặc hằng ngày vào giờ nhất định, chọn được các ngày trong tuần. Đến hạn Mochi nói câu nhắc bằng bong bóng, nhún nhảy và kêu chuông (trừ khi yên lặng hoặc tắt âm). Chuột phải → Nhắc việc...
 - Chế độ: Bình thường, Làm việc (ngồi gõ laptop suốt, ít nói, không chạy đuổi), Chơi đùa (hiếu động, hay chạy đuổi), Ngủ (ngủ liền, tắt tiếng), Yên lặng; và bạn lưu được cài đặt hiện tại thành chế độ của riêng mình. Đổi nhanh ở chuột phải → Chế độ
-- Màn hình nền: thả một file/icon lên Mochi thì nó phản ứng ("Nom nom! báo cáo.pdf ngon quá!"; nó không mở, không di chuyển, không xoá file); chuột phải → "Mở từ màn hình nền" liệt kê các mục trên desktop để Mochi mở giúp; thỉnh thoảng nó nhận xét về một mục nào đó
+- Màn hình nền: thả một file/icon lên Mochi thì nó phản ứng ("Nom nom! báo cáo.pdf ngon quá!"; nó không mở, không di chuyển, không xoá file); thỉnh thoảng nó nhận xét về một mục trên desktop
 - Lời thoại hiện 2,5 đến 5 giây tuỳ độ dài
-- Chuột phải: Màu / Chế độ / Pomodoro / Nhắc việc / Chế độ yên lặng / Cài đặt / Nhân vật / Mở từ màn hình nền / Ngủ / Gọi về / Tạm dừng / Tự chạy khi đăng nhập / Thoát
+- Chuột phải: Màu / Chế độ / Pomodoro / Nhắc việc / Chế độ yên lặng / Cài đặt / Nhân vật / Ngủ / Gọi về / Tạm dừng / Tự chạy khi đăng nhập / Thoát
 
 ## Nền tảng hỗ trợ
 

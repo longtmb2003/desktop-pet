@@ -18,13 +18,6 @@ def desk(tmp_path, monkeypatch):
     return d
 
 
-@pytest.fixture
-def opened(monkeypatch):
-    got = []
-    monkeypatch.setattr(mp.QDesktopServices, "openUrl", lambda url: got.append(url.toLocalFile()) or True)
-    return got
-
-
 def drop(pet, *paths):
     mime = QMimeData(); mime.setUrls([QUrl.fromLocalFile(str(p)) for p in paths])
     pet.dropEvent(QDropEvent(QPointF(50, 50), Qt.CopyAction, mime, Qt.LeftButton, Qt.NoModifier))
@@ -42,11 +35,11 @@ def test_the_pet_accepts_drops_of_files_and_only_files(pet):
     assert enter(files) and not enter(text)
 
 
-def test_dropping_a_file_makes_it_react_and_touches_nothing(pet, desk, opened):
+def test_dropping_a_file_makes_it_react_and_touches_nothing(pet, desk):
     pet.grounded = True; pet.enter(State()); pet.vy = 0.0
     drop(pet, desk / "Báo cáo.pdf")
     assert pet.bubble.lines == "Nom nom! Báo cáo.pdf ngon quá!" and pet.state.expression is Expression.HAPPY and pet.vy < 0 and pet.hearts
-    assert opened == [] and (desk / "Báo cáo.pdf").exists()                      # it never opens, moves or deletes what it is given
+    assert (desk / "Báo cáo.pdf").exists()                                       # it never opens, moves or deletes what it is given
 
 
 def test_dropping_several_files_or_odd_names_is_summarised_and_safe(pet, desk):
@@ -64,27 +57,6 @@ def test_a_character_can_have_its_own_drop_line(qapp, tmp_path):
     assert plain.drop == MOCHI.drop and plain.desktop_remark == MOCHI.desktop_remark                  # defaults when a pack says nothing
     long = load_dir(write_pack(tmp_path / "r", id="long", drop="x" * 999 + "\x00\n"))
     assert len(long.drop) <= 80 and "\x00" not in long.drop
-
-
-def test_the_menu_lists_what_is_on_the_desktop_and_opening_one_says_so(pet, desk, opened):
-    menu = pet.build_menu()
-    sub = next(a.menu() for a in menu.actions() if a.text() == "Mở từ màn hình nền")
-    assert [a.text() for a in sub.actions()] == ["Báo cáo", "Telegram Desktop"]
-    pet.grounded = True; pet.enter(State())
-    sub.actions()[1].trigger()
-    assert opened == [str(desk / "tele.desktop")] and pet.bubble.lines == "Mở Telegram Desktop nhé!"
-
-
-def test_there_is_no_desktop_entry_when_the_desktop_is_empty_or_missing(pet, tmp_path, monkeypatch):
-    monkeypatch.setenv("MOCHI_DESKTOP", str(tmp_path / "nowhere")); pet.desk_items = None
-    assert "Mở từ màn hình nền" not in [a.text() for a in pet.build_menu().actions()]
-
-
-def test_only_things_on_the_desktop_can_be_opened(pet, desk, opened, tmp_path):
-    (tmp_path / "secret.txt").write_text("x")
-    assert pet.open_desktop_item(tmp_path / "secret.txt") is False and pet.open_desktop_item(desk / ".." / "secret.txt") is False
-    assert pet.open_desktop_item(desk / "nope") is False and opened == [] and not pet.bubble.isVisible()
-    assert pet.open_desktop_item(desk / "Báo cáo.pdf") is True and opened == [str(desk / "Báo cáo.pdf")]
 
 
 def test_it_sometimes_remarks_on_desktop_items_and_the_setting_turns_that_off(pet, desk, monkeypatch):
