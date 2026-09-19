@@ -85,3 +85,17 @@ def test_pack_dirs_finds_user_packs_under_xdg_data_home(tmp_path, monkeypatch):
 
 def test_mochi_keeps_the_original_geometry_and_behaviour():
     assert (MOCHI.size, MOCHI.feet, MOCHI.top, MOCHI.height, MOCHI.walk_speed) == (160, 146, 40, 106, 55.0)
+
+
+def test_the_work_prop_defaults_to_a_laptop_and_can_be_a_busy_sign(qapp, tmp_path):
+    assert load_dir(write_pack(tmp_path / "a")).pack.work_prop == "laptop"
+    assert load_dir(write_pack(tmp_path / "b", id="b", work_prop="sign")).pack.work_prop == "sign"
+    for bad in ("gun", "", 5, None, ["sign"]):
+        if bad is None: continue                                             # (a missing/null value just means the default)
+        with pytest.raises(ValueError, match="work_prop"):
+            load_dir(write_pack(tmp_path / "c", id="c", work_prop=bad))
+
+
+def test_the_sleeve_colour_is_taken_from_the_body_or_falls_back(qapp, tmp_path):
+    pk = load_dir(write_pack(tmp_path / "a")).pack
+    assert pk.coat.alpha() == 255 and 25 < pk.coat.lightness() < 225         # the synthetic body is a blue blob: some colour of it

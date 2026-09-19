@@ -22,7 +22,7 @@
 - Click xuyên qua phần trong suốt quanh pet
 - 5 màu (Kem, Cam, Xám, Bạc hà, Hồng), được nhớ cho lần chạy sau
 - Bong bóng thoại: "Á!" khi hoảng sợ, thỉnh thoảng nói vu vơ, báo Pomodoro và thông báo từ chương trình khác. Có hàng đợi (tối đa 5), tự tắt sau vài giây, click xuyên qua, tự chọn bên trái/phải để không tràn màn hình
-- Pomodoro: chuột phải → Pomodoro → Bắt đầu. Khi tập trung, Mochi ngồi gõ laptop nhỏ; hết giờ thì có bong bóng, tiếng chuông và chuyển sang giờ nghỉ (tự đặt độ dài trong Cài đặt)
+- Pomodoro: chuột phải → Pomodoro → Bắt đầu. Khi tập trung, Mochi ngồi gõ laptop nhỏ (Hà Nhân thì cầm biển đỏ cấm "BẬN" lắc lư: đang bận, đừng làm phiền); hết giờ thì có bong bóng, tiếng chuông và chuyển sang giờ nghỉ (tự đặt độ dài trong Cài đặt)
 - Chỉ ngủ khi có lý do, không bao giờ ngủ ngẫu nhiên: lúc bạn khoá màn hình hoặc cho máy ngủ (thức dậy khi mở khoá, có lời chào), ngủ trưa từ 12:00 đến 13:30 và ngủ tối từ 22:00 đến 06:00 (giờ địa phương, chỉnh được trong Cài đặt). Vuốt ve thì nó dậy chơi rồi lại ngủ sau nửa phút; đang Pomodoro thì nó vẫn ngồi gõ laptop. Từ 22:00 nó còn bớt chạy đuổi
 - Máy bận: nếu cài `psutil`, CPU trên 80% thì Mochi toát mồ hôi, đi chậm lại và giảm tốc độ vẽ; xuống dưới 65% mới hết (khoảng giữa hai ngưỡng để không nhấp nháy). Đọc CPU 8 giây một lần
 - Chế độ yên lặng: không nói vu vơ, không âm thanh, giảm tốc độ vẽ khi đứng yên. Tự bật khi có ứng dụng toàn màn hình (KDE), tắt được trong Cài đặt
@@ -88,7 +88,7 @@ faces/*.png      các khuôn mặt vẽ đè lên (nét mực trên nền trong 
  "body": "body.png", "face": {"box": [69, 162, 198, 172]},
  "faces": {"neutral": ["faces/neutral_00.png"], "talk": ["faces/talk_00.png", "faces/talk_01.png"], "laugh": ["faces/laugh_00.png"]},
  "fps": {"talk": 12}, "behaviors": {"idle": 4, "walk": 4, "sleep": 1, "chase": 1, "rant": 2},
- "chatter": ["Làm việc đi!"], "scream": "Trời ơi!", "sway": 4, "bob": 5}
+ "chatter": ["Làm việc đi!"], "scream": "Trời ơi!", "sway": 4, "bob": 5, "work_prop": "sign"}
 ```
 
 Mochi chỉ đọc gói, không chạy code trong đó. Gói sai (thiếu ảnh, số lạ, đường dẫn chui ra ngoài thư mục) bị bỏ qua kèm cảnh báo, không làm Mochi hỏng. Ảnh chỉ được chuyển động bằng phép biến đổi (nhún, nghiêng, lộn, nằm xuống) và đổi mặt; biểu cảm ngủ và chóng mặt do Mochi tự vẽ lên khuôn mặt.

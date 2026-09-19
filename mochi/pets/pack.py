@@ -14,6 +14,7 @@ pack.json (all lengths in window pixels at scale 1, image coordinates in pixels 
   chatter, scream  what it says now and then / when the ground vanishes
   drop, desktop_remark   what it says when a file is dropped on it / about an item on the desktop; "{name}" stands for the item
   sway, bob        walking waddle: degrees of tilt and pixels of bounce
+  work_prop        what it holds while working (Pomodoro): "laptop" (default) or "sign", a red no-entry "BẬN" (busy) sign
 """
 import json
 import math
@@ -22,7 +23,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from PySide6.QtGui import QImage
+from PySide6.QtGui import QColor, QImage
 
 from ..bubble import clean_text
 from ..state import BEHAVIOR_NAMES
@@ -44,6 +45,8 @@ class SpritePack:
     sway: float = 4.0
     bob: float = 4.0
     masks: dict = field(default_factory=dict)     # cache: (scale, facing) -> exact outline region
+    work_prop: str = "laptop"                     # what it holds while working: "laptop" | "sign" (a red "busy" sign)
+    coat: QColor = field(default_factory=lambda: QColor(70, 82, 104))     # its sleeve colour, sampled from the body
 
     def face(self, kind, t):
         """the overlay for face `kind` at time t: an animated kind steps through its frames, others show their first"""
@@ -77,6 +80,15 @@ def _image(root, rel):
     if im.isNull(): raise ValueError(f"cannot read image {rel!r}")
     if im.width() > MAX_IMAGE or im.height() > MAX_IMAGE: raise ValueError(f"image {rel!r} is too large")
     return im.convertToFormat(QImage.Format_ARGB32_Premultiplied)
+
+
+def coat_color(body):
+    """the colour of the clothing at the upper arm (an opaque pixel about a quarter of the way in, 60% of the way down), for sleeves"""
+    w, h = body.width(), body.height()
+    for dx in (0, -0.05, 0.05, -0.1, 0.1, 0.15):
+        c = QColor(body.pixel(int((0.25 + dx) * w), int(0.6 * h)))
+        if c.alpha() == 255 and 25 < c.lightness() < 225: return c
+    return QColor(70, 82, 104)
 
 
 def load_dir(root):
@@ -113,7 +125,9 @@ def load_dir(root):
     if len(weights) < 2 or BEHAVIOR_NAMES["idle"] not in weights: raise ValueError('behaviors needs "idle" and at least one more')
     chatter = tuple(c for c in (clean_text(x) for x in (j.get("chatter") or [])[:50] if isinstance(x, str)) if c)
     sway, bob = _num(j.get("sway", 4), "sway", 0, 20), _num(j.get("bob", 4), "bob", 0, 30)
-    pack = SpritePack(body, height, (bx, by, bw, bh), faces, fps, sway, bob)
+    prop = j.get("work_prop", "laptop")
+    if prop not in ("laptop", "sign"): raise ValueError(f"work_prop must be laptop or sign, got {prop!r}")
+    pack = SpritePack(body, height, (bx, by, bw, bh), faces, fps, sway, bob, work_prop=prop, coat=coat_color(body))
     text = {k: clean_text(j.get(k) or "")[:80] or dflt for k, dflt in (("drop", PetDef.drop), ("desktop_remark", PetDef.desktop_remark))}
     return PetDef(pid, name, "sprite", size, feet, feet - int(height), _num(j.get("walk_speed", 45), "walk_speed", 5, 400), weights,
                   chatter or ("...",), clean_text(j.get("scream") or "Á!")[:20] or "Á!", text["drop"], text["desktop_remark"], pack)

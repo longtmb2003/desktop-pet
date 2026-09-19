@@ -309,3 +309,50 @@ def test_the_real_hanhan_pack_is_never_clipped_in_any_pose(qapp, tmp_path, make,
                     left, edge = uncovered_and_clipped(p)
                     assert left < 40, f"not clickable (alpha {left}): {state} facing={facing} hot={hot} phase={k}"
                     assert edge < 40, f"cut off by the window edge (alpha {edge}): {state} facing={facing} hot={hot} phase={k}"
+
+
+@pytest.mark.parametrize("prop", ["laptop", "sign"])
+@pytest.mark.parametrize("wide", [False, True])
+def test_holding_a_prop_stays_inside_the_mask_and_the_window_and_looks_different(qapp, tmp_path, make, prop, wide):
+    d = load_dir(write_pack(tmp_path / f"{prop}{wide}", id="prop", wide=wide, work_prop=prop, height=100 if wide else 150))
+    p = make("prop", 1.0, {"mochi": MOCHI, "prop": d})
+    from mochi.state import State as S_
+    p.grounded, p.hot, p.squash, p.hearts = True, False, 0.0, []
+    for facing in (1, -1):
+        for k in range(8):
+            p.facing, p.state, p.t, p.began, p.dur = facing, S_(action=Action.WORK), 10.0 + k * 0.37, 10.0, 8.0
+            left, edge = uncovered_and_clipped(p)
+            assert left < 40, (prop, wide, facing, k, left)
+            assert wide or edge < 40, (prop, facing, k, edge)                          # (a body as wide as the window touches it anyway)
+    p.state = S_(); idle = p.grab().toImage()
+    p.state = S_(action=Action.WORK); working = p.grab().toImage()
+    assert idle != working                                                   # the prop is really drawn
+
+
+def render(p):
+    from PySide6.QtCore import QPoint
+    img = QImage(p.size, p.size, QImage.Format_ARGB32); img.fill(0)
+    pt = QPainter(img); p.render(pt, QPoint(0, 0)); pt.end()
+    return img
+
+
+def test_the_busy_sign_is_red_and_its_text_reads_the_same_whichever_way_it_faces(qapp, tmp_path, make):
+    sign = load_dir(write_pack(tmp_path / "s", id="s", work_prop="sign"))
+    laptop = load_dir(write_pack(tmp_path / "l", id="l", work_prop="laptop"))
+    p = make("s", 1.0, {"mochi": MOCHI, "s": sign, "l": laptop})
+    p.grounded, p.hot, p.squash, p.hearts, p.state = True, False, 0.0, [], State(action=Action.WORK)
+    p.t, p.began, p.dur = 10.472, 10.0, 8.0                                # 3t = 10 pi: the sign is exactly upright
+
+    def reds(img):
+        return sum(1 for y in range(img.height()) for x in range(img.width())
+                   if (c := img.pixelColor(x, y)).alpha() > 200 and c.red() > 170 and c.green() < 70 and c.blue() < 80)
+    p.facing = 1; right = render(p)
+    p.facing = -1; left = render(p)
+    assert reds(right) > 300 and reds(left) > 300                          # a big red no-entry sign
+    p.defn = laptop; p.mask_key = None; p.facing = 1
+    assert reds(render(p)) < 30                                            # the laptop is grey: no red to speak of
+    # the plaque under the disc: same pixels facing either way, or the "BẬN" would come out mirrored
+    bw = 40 * 150 / 80                                                     # the synthetic body's drawn width
+    cy, r = -sign.height * 0.44, bw * 0.30
+    x0, y0, w, h = int(sign.size / 2 - bw * 0.2), int(sign.feet + cy + r + 6), int(bw * 0.4), 8
+    assert right.copy(x0, y0, w, h) == left.copy(x0, y0, w, h)

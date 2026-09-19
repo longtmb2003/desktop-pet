@@ -133,7 +133,7 @@ def main():
         "chatter": ["Làm việc đi!", "Sao còn chưa lưu file?", "Nhìn cái gì?", "Uống nước chưa hả?", "Ngồi lì thế, đứng dậy đi!",
                     "Hừm...", "Nghỉ mắt tí đi, đỏ hết rồi kìa"],
         "scream": "Trời ơi!", "drop": "Cái gì đây? {name}", "desktop_remark": "{name}... nằm chình ình ở đó làm gì?",
-        "sway": 4, "bob": 5}, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+        "sway": 4, "bob": 5, "work_prop": "sign"}, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     print("wrote", OUT, "body", body.width(), "x", body.height(), "box", box)
     if "--preview" in sys.argv:
         preview(body, box, faces, Path(sys.argv[sys.argv.index("--preview") + 1]))

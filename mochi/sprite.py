@@ -38,6 +38,51 @@ def vector_face(p, s, kind, box):
     p.drawEllipse(QPointF(x + w * 0.5, y + h * 0.72), w * 0.05, w * (0.04 if kind == "sleep" else 0.06))
 
 
+SKIN = QColor(247, 203, 160)
+RED = QColor(206, 32, 41)
+
+
+def arm(p, pk, sx, hand, bw, bh):
+    """a sleeve from the shoulder at x = sx (body units, origin at the feet) to a hand: thick round stroke in the coat's colour"""
+    p.setPen(QPen(pk.coat, max(9.0, bw * 0.13), Qt.SolidLine, Qt.RoundCap)); p.drawLine(QPointF(sx, -bh * 0.5), hand)
+
+
+def hand(p, at):
+    p.setPen(QPen(QColor(150, 105, 80), 1)); p.setBrush(SKIN); p.drawEllipse(at, 6.5, 6)
+
+
+def draw_prop(p, pk, bw, bh, t, facing):
+    """what it holds while working: a red "no entry, busy" sign, or a laptop; both held by two hands with sleeves from the shoulders,
+    so it is clearly gripped rather than floating in front of the body"""
+    sx = bw * 0.27                                                                    # where the sleeves start: on the chest
+    if pk.work_prop == "sign":
+        cy, r = -bh * 0.44, bw * 0.30                                                 # the disc's centre and radius
+        grip = QPointF(0, cy + 6)                                                     # the sign is held by its sides
+        holds = [QPointF(side * (r + 1), cy + 6) for side in (-1, 1)]
+        for side, h in zip((-1, 1), holds, strict=True): arm(p, pk, side * sx, h, bw, bh)
+        p.save(); p.translate(grip); p.rotate(math.sin(t * 3) * 4); p.translate(-grip)   # the sign sways a little: "not now!"
+        p.setPen(QPen(QColor(120, 20, 25), 1.5)); p.setBrush(Qt.white); p.drawEllipse(QPointF(0, cy), r, r)
+        p.setPen(QPen(RED, r * 0.24)); p.setBrush(Qt.NoBrush); p.drawEllipse(QPointF(0, cy), r * 0.86, r * 0.86)
+        d = r * 0.86 * 0.7071
+        p.setPen(QPen(RED, r * 0.24, Qt.SolidLine, Qt.FlatCap)); p.drawLine(QPointF(-d, -d + cy), QPointF(d, d + cy))       # the slash
+        p.setPen(QPen(QColor(120, 20, 25), 1)); p.setBrush(RED)
+        plaque = QRectF(-bw * 0.24, cy + r + 3, bw * 0.48, 15)
+        p.drawRoundedRect(plaque, 3, 3)
+        p.save(); p.translate(plaque.center()); p.scale(facing, 1)                     # text must not come out mirrored
+        f = p.font(); f.setBold(True); f.setPixelSize(11); p.setFont(f); p.setPen(Qt.white)
+        p.drawText(QRectF(-plaque.width() / 2, -plaque.height() / 2, plaque.width(), plaque.height()), Qt.AlignCenter, "BẬN")
+        p.restore()
+        p.restore()
+        for h in holds: hand(p, h)
+    else:
+        top = -bh * 0.36
+        for side in (-1, 1): arm(p, pk, side * sx, QPointF(side * bw * 0.20, top + 4), bw, bh)
+        p.setPen(QPen(QColor(90, 96, 110), 2)); p.setBrush(QColor(176, 184, 198))
+        p.drawRoundedRect(QRectF(-bw * 0.28, top, bw * 0.56, bh * 0.16), 4, 4)
+        p.setPen(Qt.NoPen); p.setBrush(QColor(236, 240, 246)); p.drawEllipse(QPointF(0, top + bh * 0.08), 3, 3)
+        for side in (-1, 1): hand(p, QPointF(side * bw * 0.20, top + 2))              # resting on the top edge
+
+
 def pose(pet):
     """(dx, dy, rot, sx, sy, spin, lying): where the body is and how it is turned, from what the pet is doing"""
     t, s, pk = pet.t, pet.state, pet.defn.pack
@@ -89,10 +134,7 @@ def paint_sprite(pet, p):
         kind = face_kind(pet)
         p.drawImage(QRectF(bx, by, fw, fh), pk.face(kind, t))
     p.restore()
-    if s.action is Action.WORK:                                                           # the back of a tiny laptop at waist height
-        p.setPen(QPen(QColor(90, 96, 110), 2)); p.setBrush(QColor(176, 184, 198))
-        p.drawRoundedRect(QRectF(-bw * 0.28, -bh * 0.36, bw * 0.56, bh * 0.16), 4, 4)
-        p.setPen(Qt.NoPen); p.setBrush(QColor(236, 240, 246)); p.drawEllipse(QPointF(0, -bh * 0.28), 3, 3)
+    if s.action is Action.WORK: draw_prop(p, pk, bw, bh, t, pet.facing)
     p.resetTransform(); p.scale(pet.scale, pet.scale); p.translate(d.size / 2, d.feet)    # extras: upright, not turned with the body
     if lying:
         f = p.font(); f.setBold(True)

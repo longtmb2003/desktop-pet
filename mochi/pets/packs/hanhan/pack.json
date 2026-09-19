@@ -73,5 +73,6 @@
  "sway": 4,
  "bob": 5,
  "drop": "Cái gì đây? {name}",
- "desktop_remark": "{name}... nằm chình ình ở đó làm gì?"
+ "desktop_remark": "{name}... nằm chình ình ở đó làm gì?",
+ "work_prop": "sign"
 }
