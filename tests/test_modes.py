@@ -20,7 +20,8 @@ def test_every_builtin_sets_every_key_within_range():
 def test_values_from_junk_are_cleaned_field_by_field():
     got = modes.clean_values({"activity": 99, "speed": -1, "chase": "yes", "chatter": False, "sound": None, "quiet": 1, "extra": 5,
                              "time_of_day": True})
-    assert got == {"activity": 3.0, "speed": 0.3, "chase": True, "chatter": False, "time_of_day": True, "sound": True, "quiet": False}
+    assert got == {"activity": 3.0, "speed": 0.3, "chase": True, "chatter": False, "time_of_day": True, "sound": True, "quiet": False,
+                   "mischief": True}
     assert modes.clean_values(None) == modes.DEFAULTS and modes.clean_values({"speed": float("nan")})["speed"] == 1.0
     assert modes.clean_values({"activity": True})["activity"] == 1.0            # a bool is not a number here
 
@@ -60,5 +61,5 @@ def test_boosting_weights_multiplies_only_the_named_behaviours_and_leaves_the_or
     w = modes.weights(BEHAVIORS, {"chase": 4, "idle": 2})
     assert w[(Motion.WALK, Action.CHASE)] == 4 * BEHAVIORS[(Motion.WALK, Action.CHASE)]
     assert w[(Motion.IDLE, Action.NONE)] == 2 * BEHAVIORS[(Motion.IDLE, Action.NONE)]
-    assert w[(Motion.SLEEP, Action.NONE)] == BEHAVIORS[(Motion.SLEEP, Action.NONE)]
+    assert w[(Motion.WALK, Action.NONE)] == BEHAVIORS[(Motion.WALK, Action.NONE)]
     assert BEHAVIORS == orig and modes.weights(BEHAVIORS, {}) is BEHAVIORS

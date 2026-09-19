@@ -53,5 +53,14 @@ class Settings:
     mode = _prop("mode", "normal")                     # the active mode's id (modes.py)
     custom_modes = _prop("custom_modes", "")              # JSON text: the user's own modes
     desktop = _prop("desktop", True)                       # now and then remark on what is on the desktop
+    sleep_system = _prop("sleep_system", True)              # asleep while the screen is locked or the computer sleeps
+    nap_on = _prop("nap_on", True)                          # the midday nap ...
+    nap_from = _prop("nap_from", "12:00")
+    nap_to = _prop("nap_to", "13:30")
+    night_on = _prop("night_on", True)                      # ... and the night's sleep (may run past midnight)
+    night_from = _prop("night_from", "22:00")
+    night_to = _prop("night_to", "06:00")
+    mischief = _prop("mischief", True)                     # get up to mischief on the window you are working in
+    app_remarks = _prop("app_remarks", True)               # remark on the kind of program you are using (its class, never its title)
     focus_min = _prop("focus_min", 25, 1, 180)          # Pomodoro focus length
     break_min = _prop("break_min", 5, 1, 60)            # Pomodoro break length

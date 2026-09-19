@@ -1,34 +1,12 @@
-from pathlib import Path
 
 import pytest
-from conftest import write_pack
-from PySide6.QtCore import QPoint, QSettings
-from PySide6.QtGui import QImage, QPainter
+from conftest import HANHAN, render, uncovered_and_clipped, write_pack
+from PySide6.QtCore import QPoint
 
-from mochi.pet import Pet
 from mochi.pets import MOCHI
 from mochi.pets.pack import load_dir
 from mochi.physics import FEET, S
-from mochi.settings import Settings
 from mochi.state import Action, Expression, Motion, State
-
-
-@pytest.fixture
-def pets(qapp, tmp_path):
-    return {"mochi": MOCHI, "blob": load_dir(write_pack(tmp_path / "pack"))}
-
-
-@pytest.fixture
-def make(qapp, tmp_path, pets):
-    made = []
-
-    def build(pet="blob", scale=1.0, pets=pets):
-        cfg = Settings(QSettings(str(tmp_path / f"s{len(made)}.ini"), QSettings.IniFormat)); cfg.pet, cfg.scale = pet, scale
-        p = Pet(cfg, pets); p.timer.stop(); p.clock.restart = lambda: 33
-        made.append(p)
-        return p
-    yield build
-    for p in made: p.close()
 
 
 def floor_y(p):
@@ -149,21 +127,6 @@ STATES = [State(), State(Motion.WALK), State(Motion.WALK, Expression.DIZZY), Sta
           State(Motion.AIRBORNE, Expression.SCARED), State(Motion.DRAG), State(action=Action.FLIP), State(action=Action.WORK),
           State(Motion.WALK, action=Action.PUSH), State(Motion.WALK, action=Action.CHASE), State(action=Action.RANT),
           State(action=Action.YAWN)]
-
-
-def uncovered_and_clipped(p):
-    """(strongest visible pixel outside the click mask, strongest visible pixel on the window edge), as alpha values, for what the
-    pet paints now. Done with image operations, not a Python loop over pixels, so a sweep of poses stays fast."""
-    from PySide6.QtCore import Qt
-    n = p.size
-    p.mask_key = None; p.update_mask(); m = p.mask(); p.clearMask()
-    img = QImage(n, n, QImage.Format_ARGB32); img.fill(0)
-    pt = QPainter(img); p.render(pt, QPoint(0, 0)); pt.end()
-    a = bytes(img.constBits())[3::4]
-    edge = max(max(a[:n]), max(a[-n:]), max(a[::n]), max(a[n - 1::n]))
-    q = QPainter(img); q.setClipRegion(m); q.setCompositionMode(QPainter.CompositionMode_DestinationOut)
-    q.fillRect(img.rect(), Qt.black); q.end()
-    return max(bytes(img.constBits())[3::4]), edge                       # what remains after erasing everything the mask covers
 
 
 @pytest.mark.parametrize("scale", [0.6, 1.0, 1.7])
@@ -290,9 +253,6 @@ def test_hearts_rise_from_above_the_head_of_whatever_it_is(make):
     assert all(y == -95 for _, y, _ in m.hearts)                         # Mochi's hearts are exactly where they always were
 
 
-HANHAN = Path(__file__).resolve().parent.parent / "mochi" / "pets" / "packs" / "hanhan"
-
-
 @pytest.mark.skipif(not (HANHAN / "pack.json").exists(), reason="the Hà Nhân pack is local-only (artwork not in the repository)")
 @pytest.mark.parametrize("scale", [0.6, 1.0, 1.7])
 def test_the_real_hanhan_pack_is_never_clipped_in_any_pose(qapp, tmp_path, make, scale):
@@ -309,3 +269,152 @@ def test_the_real_hanhan_pack_is_never_clipped_in_any_pose(qapp, tmp_path, make,
                     left, edge = uncovered_and_clipped(p)
                     assert left < 40, f"not clickable (alpha {left}): {state} facing={facing} hot={hot} phase={k}"
                     assert edge < 40, f"cut off by the window edge (alpha {edge}): {state} facing={facing} hot={hot} phase={k}"
+
+
+@pytest.mark.parametrize("prop", ["laptop", "sign"])
+@pytest.mark.parametrize("wide", [False, True])
+def test_holding_a_prop_stays_inside_the_mask_and_the_window_and_looks_different(qapp, tmp_path, make, prop, wide):
+    d = load_dir(write_pack(tmp_path / f"{prop}{wide}", id="prop", wide=wide, work_prop=prop, height=100 if wide else 150))
+    p = make("prop", 1.0, {"mochi": MOCHI, "prop": d})
+    from mochi.state import State as S_
+    p.grounded, p.hot, p.squash, p.hearts = True, False, 0.0, []
+    for facing in (1, -1):
+        for k in range(8):
+            p.facing, p.state, p.t, p.began, p.dur = facing, S_(action=Action.WORK), 10.0 + k * 0.37, 10.0, 8.0
+            left, edge = uncovered_and_clipped(p)
+            assert left < 40, (prop, wide, facing, k, left)
+            assert wide or edge < 40, (prop, facing, k, edge)                          # (a body as wide as the window touches it anyway)
+    p.state = S_(); idle = p.grab().toImage()
+    p.state = S_(action=Action.WORK); working = p.grab().toImage()
+    assert idle != working                                                   # the prop is really drawn
+
+
+def test_the_busy_sign_is_red_and_its_text_reads_the_same_whichever_way_it_faces(qapp, tmp_path, make, monkeypatch):
+    sign = load_dir(write_pack(tmp_path / "s", id="s", work_prop="sign"))
+    laptop = load_dir(write_pack(tmp_path / "l", id="l", work_prop="laptop"))
+    p = make("s", 1.0, {"mochi": MOCHI, "s": sign, "l": laptop})
+    p.grounded, p.hot, p.squash, p.hearts, p.state = True, False, 0.0, [], State(action=Action.WORK)
+    p.t, p.began, p.dur = 10.472, 10.0, 8.0                                # 3t = 10 pi: the sign is exactly upright
+
+    def reds(img):
+        return sum(1 for y in range(img.height()) for x in range(img.width())
+                   if (c := img.pixelColor(x, y)).alpha() > 200 and c.red() > 170 and c.green() < 70 and c.blue() < 80)
+    p.facing = 1; right = render(p)
+    p.facing = -1; left = render(p)
+    import mochi.sprite as sp
+    from PySide6.QtCore import QPointF
+    monkeypatch.setattr(sp, "draw_arm", lambda *a, **k: (QPointF(0, 0), QPointF(0, -1)))     # (arms aren't mirror images: leave them out)
+    monkeypatch.setattr(sp, "draw_hand", lambda *a, **k: None)
+    p.facing = 1; right_text = render(p)
+    p.facing = -1; left_text = render(p)
+    assert reds(right) > 300 and reds(left) > 300                          # a big red no-entry sign
+    p.defn = laptop; p.mask_key = None; p.facing = 1
+    assert reds(render(p)) < 30                                            # the laptop is grey: no red to speak of
+    # the plaque under the disc: same pixels facing either way, or the "BẬN" would come out mirrored
+    bw = 40 * 150 / 80                                                     # the synthetic body's drawn width
+    cy, r = -sign.height * 0.44, bw * 0.30
+    x0, y0, w, h = int(sign.size / 2 - bw * 0.2), int(sign.feet + cy + r + 6), int(bw * 0.4), 8
+    assert right_text.copy(x0, y0, w, h) == left_text.copy(x0, y0, w, h)
+
+
+# ---- which way the art looks, and turning round -------------------------------------------------------------------
+def looks_pets(tmp_path, make):
+    right = load_dir(write_pack(tmp_path / "r", id="r", nose=True, looks="right"))
+    left = load_dir(write_pack(tmp_path / "l", id="l", nose=True, looks="left"))            # same picture, but it says the art looks left
+    pets = {"mochi": MOCHI, "r": right, "l": left}
+    a, b = make("r", 1.0, pets), make("l", 1.0, pets)
+    for p in (a, b):
+        p.grounded, p.hot, p.squash, p.hearts, p.state, p.t = True, False, 0.0, [], State(), 10.0
+    return a, b
+
+
+def different_pixels(x, y):
+    return sum(1 for j in range(x.height()) for i in range(x.width()) if x.pixel(i, j) != y.pixel(i, j))
+
+
+def test_the_art_is_mirrored_so_that_it_always_looks_where_it_walks(qapp, tmp_path, make):
+    r, l = looks_pets(tmp_path, make)
+    r.facing = 1; l.facing = -1
+    assert different_pixels(render(r), render(l)) == 0                     # each walking the way its art looks: drawn as is
+    r.facing = -1; l.facing = 1
+    assert different_pixels(render(r), render(l)) == 0                     # ... and walking the other way: both mirrored
+    r.facing = 1
+    assert different_pixels(render(r), render(l)) > 500                    # (same direction, opposite art: really different)
+
+    def nose_x(img):                                                       # where the red nose is, horizontally
+        xs = [x for y in range(img.height()) for x in range(img.width())
+              if (c := img.pixelColor(x, y)).alpha() > 200 and c.red() > 170 and c.green() < 90]
+        return sum(xs) / len(xs)
+    r.facing = 1; right_nose = nose_x(render(r))
+    r.facing = -1; left_nose = nose_x(render(r))
+    assert right_nose > r.size / 2 + 10 and left_nose < r.size / 2 - 10    # the nose leads: right when walking right, left going left
+    assert abs((right_nose - r.size / 2) + (left_nose - r.size / 2)) < 2   # and the two are mirror images
+
+
+def test_the_click_mask_follows_the_mirroring(qapp, tmp_path, make):
+    r, l = looks_pets(tmp_path, make)
+    for p, f in ((r, 1), (l, -1), (r, -1), (l, 1)):
+        p.facing = f
+        left, edge = uncovered_and_clipped(p)
+        assert left < 40 and edge < 40
+
+
+def test_a_pack_says_which_way_it_looks_and_bad_values_are_refused(qapp, tmp_path):
+    assert load_dir(write_pack(tmp_path / "a", id="a")).pack.art == 1
+    assert load_dir(write_pack(tmp_path / "b", id="b", looks="left")).pack.art == -1
+    assert load_dir(write_pack(tmp_path / "c", id="c")).turn_s == 0.25 and load_dir(write_pack(tmp_path / "d", id="d", turn=0)).turn_s == 0
+    for bad in ("up", "", 1):
+        with pytest.raises(ValueError, match="looks"): load_dir(write_pack(tmp_path / "e", id="e", looks=bad))
+    for bad in (-1, 99, "slow"):
+        with pytest.raises(ValueError, match="turn"): load_dir(write_pack(tmp_path / "f", id="f", turn=bad))
+
+
+def walking_pet(make, tmp_path):
+    p = make("blob", 1.0)
+    g = p.screen_geo()
+    p.px, p.py, p.vx, p.vy, p.support = g.left + 400.0, floor_y(p), 0.0, 0.0, None
+    p.grounded = True; p.enter(State(Motion.WALK)); p.until = float("inf"); p.facing = 1; p.drawn_facing = 1
+    return p
+
+
+def test_turning_round_takes_a_moment_through_edge_on_and_it_does_not_walk_backwards(make, tmp_path):
+    p = walking_pet(make, tmp_path)
+    for _ in range(3): p.tick()
+    x0 = p.px; assert x0 > 400 and p.turn_scale() == 1.0                  # walking right at full width
+    p.facing = -1; p.tick()                                                # it decides to go the other way
+    assert p.turning() and 0.0 < p.turn_scale() <= 1.0
+    seen, xs = [], []
+    for _ in range(int(p.defn.turn_s / 0.033) + 1):
+        p.tick(); seen.append(p.turn_scale()); xs.append(p.px)
+    assert min(abs(v) for v in seen) < 0.35                                 # it passed through (nearly) edge-on
+    assert all(a == xs[0] for a in xs[:max(1, len(xs) - 2)])               # standing still while turning: no moonwalking
+    for _ in range(4): p.tick()
+    assert not p.turning() and p.turn_scale() == -1.0
+    x1 = p.px
+    for _ in range(10): p.tick()
+    assert p.px < x1                                                       # then it walks off to the left, facing left
+
+
+def test_turn_scale_is_monotonic_from_one_direction_to_the_other(make, tmp_path):
+    p = walking_pet(make, tmp_path)
+    p.tick(); p.facing = -1; p.tick()
+    vals = []
+    for _ in range(12):
+        p.t += p.defn.turn_s / 10; vals.append(p.turn_scale())
+    assert all(a >= b for a, b in zip(vals, vals[1:], strict=False)) and vals[-1] == -1.0 and vals[0] < 1.0
+
+
+def test_mochi_still_turns_at_once(pet):
+    pet.grounded = True; pet.enter(State(Motion.WALK)); pet.until = float("inf"); pet.tick()
+    pet.facing = -pet.facing; pet.tick()
+    assert not pet.turning() and pet.turn_scale() == float(pet.facing)
+
+
+def test_the_click_mask_covers_every_stage_of_a_turn(make, tmp_path):
+    p = walking_pet(make, tmp_path)
+    p.tick(); p.facing = -1; p.tick()
+    for k in range(12):
+        p.t = p.turn_start + p.defn.turn_s * k / 11
+        p.state, p.squash, p.hearts, p.hot = State(Motion.WALK), 0.0, [], False
+        left, edge = uncovered_and_clipped(p)
+        assert left < 40, (k, left)

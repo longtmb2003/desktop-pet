@@ -5,10 +5,10 @@ import time
 from datetime import datetime
 
 from PySide6.QtCore import QElapsedTimer, QFileSystemWatcher, QPoint, Qt, QTimer, QUrl
-from PySide6.QtGui import QCursor, QDesktopServices, QGuiApplication, QPainter, QTransform
+from PySide6.QtGui import QCursor, QGuiApplication, QPainter, QTransform
 from PySide6.QtWidgets import QApplication, QMenu, QWidget
 
-from . import autostart, desktop, modes, monitor, physics
+from . import apps, autostart, desktop, modes, monitor, physics, sleep
 from . import reminders as rem
 from .bubble import SpeechBubble
 from .pomodoro import Pomodoro
@@ -18,9 +18,9 @@ from .physics import IMPACT_DIZZY, THROW_MIN, Bounds, DragTracker
 from .renderer import THEMES, paint, silhouette
 from .settings import Settings
 from .settings_dialog import SettingsDialog
-from .sprite import paint_sprite, sprite_mask, sprite_mask_key
+from .sprite import paint_sprite, riding, sprite_mask, sprite_mask_key
 from .sound import chime
-from .state import Action, Expression, Motion, State, after, ends_at
+from .state import SCOLDING, Action, Expression, Motion, State, after, ends_at
 
 PUSH_CHANCE = 0.5                  # of the edge encounters that aren't a hop off, how many are a push against the "wall"
 CLICK_DELAY_MS = 250                # a click waits this long for a second click before it counts as a pet
@@ -35,6 +35,7 @@ class Pet(QWidget):
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.t = self.vy = self.squash = self.blink = 0.0
         self.facing, self.hearts = 1, []            # hearts: [x, y, life]
+        self.drawn_facing, self.turn_from, self.turn_start = 1, 1.0, -1e9      # turning round takes a moment: see turn_scale()
         self.wins, self.support, self.vx, self.grounded = {}, None, 0.0, False   # wins: id -> (x, y, w, h); support: id we stand on
         self.next_blink, self.moved, self.press, self.mask_key = 2.0, False, None, None
         self.paused, self.drag, self.shaken = False, DragTracker(), False
@@ -54,6 +55,12 @@ class Pet(QWidget):
         self.pomo, self.hot, self.cpu, self.read_cpu = Pomodoro(), False, monitor.Hysteresis(), monitor.cpu_percent
         self.mon_timer = QTimer(self, interval=monitor.POLL_MS, timeout=self.poll_cpu)
         self.last_touch, self.now_hour = -1e9, lambda: datetime.now().hour      # local time zone; tests replace now_hour
+        self.now_time = lambda: datetime.now().time()
+        self.locked = self.suspended = False                                    # told by the PowerWatcher (power.py)
+        self.active_id, self.active_class, self.active_since = "", "", 0.0        # the window the user is working in (reported by KWin)
+        self.next_mischief, self.pending_mischief = 60.0, None                    # pending: (what to do, give up by) once it has jumped up
+        self.woken_for = ""                                                      # a scheduled sleep the user cancelled by choosing a mode
+        self.sleeping_for, self.power = "", None                                # why it fell asleep by itself: "system" | "nap" | "night"
         self.bubble, self.fullscreen = SpeechBubble(), False    # fullscreen: pushed by the platform (kwin.js)
         self.next_chat = random.uniform(60, 180)
         self.click_timer = QTimer(self, singleShot=True, interval=CLICK_DELAY_MS, timeout=self.pet_it)
@@ -73,6 +80,10 @@ class Pet(QWidget):
         if state.motion is Motion.WALK and state.action is Action.NONE:
             self.facing = random.choice((-1, 1))
         if state.action is Action.RANT and hasattr(self, "bubble"): self.say(random.choice(self.defn.chatter), chatter=True)
+        on_bike = state.motion is Motion.WALK and state.action is Action.NONE and hasattr(self, "bubble") and riding(self)
+        if on_bike and random.random() < 0.3:
+            self.say(random.choice(self.defn.pack.ride.lines or ("Ting ting!",)), chatter=True)          # ringing its bell
+        if state.action in SCOLDING and hasattr(self, "bubble"): self.say(random.choice(self.defn.scold or ("Làm việc đi!",)), chatter=True)
 
     def fit_size(self):
         """derive the window size and floor/head geometry from the current pet definition and scale"""
@@ -97,9 +108,29 @@ class Pet(QWidget):
         r = (QGuiApplication.screenAt(c) or QGuiApplication.primaryScreen()).availableGeometry()
         return Bounds(r.left(), r.top(), r.right(), r.bottom())
 
+    def ride_boost(self):
+        """how much faster it goes while it is on its tricycle"""
+        return self.defn.ride_speed if riding(self) else 1.0
+
+    def turning(self):
+        return self.t - self.turn_start < self.defn.turn_s
+
+    def toward(self, target):
+        """where the horizontal factor is on its way to `target`: from `turn_from`, smoothly, over the turn's duration"""
+        if not self.turning(): return float(target)
+        u = (self.t - self.turn_start) / self.defn.turn_s
+        return self.turn_from + (target - self.turn_from) * u * u * (3 - 2 * u)
+
+    def turn_scale(self):
+        """the horizontal factor for how it faces: +1 right, -1 left, and in between while it turns round (through 0: edge-on)"""
+        return self.toward(self.drawn_facing) if self.turning() else float(self.facing)
+
     def tick(self):
         dt = min(self.clock.restart() / 1000, MAX_DT)
         self.t += dt
+        if self.facing != self.drawn_facing:                          # it changed direction: turn round (standing still) before going on
+            self.turn_from = self.toward(self.drawn_facing) if self.defn.turn_s else float(self.facing)
+            self.drawn_facing, self.turn_start = self.facing, self.t
         self.squash *= 0.85
         if self.t > self.next_blink:
             self.blink, self.next_blink = 0.15, self.t + random.uniform(2, 5)
@@ -132,6 +163,7 @@ class Pet(QWidget):
                 self.land()
             if riding:                                             # on the floor or a window: free to move
                 self.grounded = True
+                self.start_pending_mischief(wid)
                 if self.state.motion is Motion.WALK:
                     if self.state.action is Action.CHASE:
                         self.chase(dt, g, cx, wid)
@@ -143,7 +175,7 @@ class Pet(QWidget):
                 if edge: self.facing = -edge                                # after shoving the edge, never walk straight back into it
             self.move(int(self.px), int(self.py))
         if self.pomo.active: self.pomodoro_event(self.pomo.poll())
-        if self.t >= self.next_check: self.next_check = self.t + 1.0; self.check_reminders()
+        if self.t >= self.next_check: self.next_check = self.t + 1.0; self.check_reminders(); self.check_sleep(); self.check_mischief()
         if self.t > self.next_chat:
             self.next_chat = self.t + random.uniform(120, 300)
             if self.state.motion in (Motion.IDLE, Motion.WALK): self.say(self.idle_remark(), chatter=True)
@@ -172,18 +204,61 @@ class Pet(QWidget):
         m = modes.available(self.cfg.custom_modes)
         return m.get(self.cfg.mode) or m["normal"]
 
+    # ---- sleep -----------------------------------------------------------
+    def sleep_reason(self):
+        """why it should be asleep now: "system" (screen locked / computer sleeping), "nap", "night", or "" (awake)"""
+        if self.cfg.sleep_system and (self.locked or self.suspended): return "system"
+        r = sleep.scheduled(self.now_time(), self.cfg)
+        return "" if r == self.woken_for else r                               # (switching to a wakeful mode cancels this window's sleep)
+
+    def attach_power(self, watcher):
+        self.power = watcher
+
+    def on_lock(self, locked):
+        self.locked = locked
+        self.check_sleep()
+
+    def on_suspend(self, going_to_sleep):
+        self.suspended = going_to_sleep
+        self.check_sleep()
+
+    def check_sleep(self):
+        """put it to sleep when it should be, and wake it (yawn, greeting) when the reason has passed. Sleep it chose itself only:
+        one you asked for from the menu is left alone"""
+        if self.woken_for and sleep.scheduled(self.now_time(), self.cfg) != self.woken_for: self.woken_for = ""      # that window is over
+        reason = self.sleep_reason()
+        if reason:
+            if self.sleeping_for and self.state.motion is Motion.SLEEP: self.sleeping_for = reason        # (say, a nap began while locked)
+            settled = self.grounded and self.state.motion in (Motion.IDLE, Motion.WALK)
+            handled = reason != "system" and self.t - self.last_touch <= 20                # not while it is being played with
+            if settled and not handled and not (reason != "system" and self.pomo.focusing):
+                self.sleeping_for = reason
+                self.enter(State(Motion.SLEEP))
+        elif self.sleeping_for:
+            was, self.sleeping_for = self.sleeping_for, ""
+            if self.state.motion is Motion.SLEEP:
+                self.enter(State(action=Action.YAWN))
+                self.say("Chào mừng bạn quay lại!" if was == "system" else "Ưm... dậy rồi!", chatter=True)
+
     def stay_state(self):
-        """what the active mode or a Pomodoro focus keeps the pet doing, or None"""
+        """what keeps the pet doing one thing: asleep (screen locked, computer asleep, nap or night), a Pomodoro focus, or the
+        active mode. None if nothing does"""
         if not self.grounded: return None
-        stay = self.mode().stay
-        if self.pomo.focusing or stay == "work": return State(action=Action.WORK)
-        if stay == "sleep" and self.t - self.last_touch > 20: return State(Motion.SLEEP)       # (not right after being played with)
+        reason, stay = self.sleep_reason(), self.mode().stay
+        if reason == "system": return State(Motion.SLEEP)
+        if self.pomo.focusing: return State(action=Action.WORK)
+        idle_for_a_while = self.t - self.last_touch > 20                                 # (not right after being played with)
+        if reason and idle_for_a_while: return State(Motion.SLEEP)
+        if stay == "work": return State(action=Action.WORK)
+        if stay == "sleep" and idle_for_a_while: return State(Motion.SLEEP)
         return None
 
     def next_state(self):
         """the state after the current one runs out"""
-        return self.stay_state() or after(self.state, hour=self.hour(), chase=self.cfg.chase,
-                                          weights=modes.weights(self.defn.behaviors, self.mode().boost))
+        s = self.stay_state()
+        if s == State(Motion.SLEEP) and self.sleep_reason(): self.sleeping_for = self.sleep_reason()      # so it wakes when that ends
+        return s or after(self.state, hour=self.hour(), chase=self.cfg.chase,
+                          weights=modes.weights(self.defn.behaviors, self.mode().boost))
 
     def find_mode(self, key):
         """a mode id from an id or a name (any case), or None"""
@@ -195,14 +270,46 @@ class Pet(QWidget):
         """switch mode: apply its settings, and keep the pet at what it asks for. False if there is no such mode"""
         mid = self.find_mode(key)
         if mid is None: return False
-        m = modes.available(self.cfg.custom_modes)[mid]
+        m, old = modes.available(self.cfg.custom_modes)[mid], self.mode()
+        if m.stay != "sleep": self.woken_for = sleep.scheduled(self.now_time(), self.cfg)      # asking for a mode wakes it, even at night
         for k, v in m.values.items(): setattr(self.cfg, k, v)
         self.cfg.mode = mid
         self.apply_settings()
         if getattr(self, "dialog", None) is not None: self.dialog.reload()
-        if self.state.motion in (Motion.IDLE, Motion.WALK, Motion.SLEEP) and (s := self.stay_state()): self.enter(s)
+        if self.state.motion in (Motion.IDLE, Motion.WALK, Motion.SLEEP):
+            s = self.stay_state()
+            if s: self.enter(s)
+            elif ((old.stay == "work" and self.state.action is Action.WORK)
+                  or (self.state.motion is Motion.SLEEP and (old.stay == "sleep" or self.sleeping_for in ("nap", "night")))):
+                self.release_stay()                                          # the old mode held it there: it is free now, at once
         self.say(f"Chế độ: {m.name}", urgent=True)
         return True
+
+    def sync_work(self):
+        """make the animation match the Pomodoro at once: at the laptop/sign while focus runs, released when it stops (unless a mode
+        or the sleep schedule holds it somewhere else)"""
+        target = self.stay_state()
+        if self.state.action is Action.WORK and target != State(action=Action.WORK):
+            self.enter(target or State())
+        elif target == State(action=Action.WORK) and self.state.motion in (Motion.IDLE, Motion.WALK, Motion.SLEEP):
+            self.enter(target)
+
+    def pomo_pause(self):
+        self.pomo.pause(); self.sync_work()
+
+    def pomo_resume(self):
+        self.pomo.resume(); self.sync_work()
+
+    def pomo_reset(self):
+        self.pomo.reset(); self.sync_work()
+
+    def release_stay(self):
+        """stop doing what a mode kept it doing (working, sleeping): wake up with a yawn, or just carry on with life"""
+        if self.state.motion is Motion.SLEEP:
+            self.sleeping_for = ""
+            self.enter(State(action=Action.YAWN))
+        else:
+            self.enter(State())
 
     def save_mode(self, name):
         """keep the current settings as a mode of the user's own, and switch to it; ValueError if the name is empty"""
@@ -233,6 +340,68 @@ class Pet(QWidget):
             except ValueError as e:
                 self.say(str(e), urgent=True)
 
+    # ---- mischief on the window you are working in ---------------------------
+    def set_active(self, wid, cls):
+        """KWin says which normal window the user is working in now ("" = none) and its program class"""
+        if wid != self.active_id: self.active_id, self.active_since = wid, self.t
+        self.active_class = cls
+
+    def check_mischief(self):
+        """once a second: if the user has been at the same window for a while, sometimes go and play on it"""
+        if not self.cfg.mischief or self.quiet or self.pomo.active or self.sleep_reason() or self.t < self.next_mischief: return
+        settled = self.grounded and self.state.motion in (Motion.IDLE, Motion.WALK) and self.state.action is Action.NONE
+        if not settled or self.pending_mischief or self.t - self.last_touch < 10: return
+        if self.active_id not in self.wins or self.t - self.active_since < 15: return
+        self.next_mischief = self.t + random.uniform(60, 150) / self.cfg.activity
+        self.begin_mischief()
+
+    def mischief_kinds(self, edge_ok):
+        """what it may get up to: bouncing and dancing anywhere, peeking and dangling only at a window's edge, scolding if it has arms"""
+        edge = [Action.PEEK, Action.DANGLE] if edge_ok else []
+        return [Action.STOMP, Action.DANCE, *edge, *(SCOLDING if self.defn.scold else ())]
+
+    def window_spot(self, wid, edge):
+        """(x of the centre, facing outwards) to stand on top of window `wid`: near the edge nearest to it if `edge`, else the middle;
+        None if it can't be stood on (too high up the screen, too narrow, covered)"""
+        x, y, w, _h = self.wins[wid]
+        g = self.screen_geo()
+        if w < physics.MIN_W or y < g.top + self.head or y > g.bottom: return None
+        cx = self.px + self.size / 2
+        lo, hi = max(x + 45, g.left + 60), min(x + w - 45, g.right - 60)
+        if lo > hi: return None
+        tx, out = (lo, -1) if abs(cx - lo) < abs(cx - hi) else (hi, 1)
+        if not edge: tx, out = max(lo, min(hi, x + w / 2)), self.facing
+        return None if physics.covered(self.wins, wid, tx, y + 1) else (tx, out)
+
+    def begin_mischief(self):
+        """say something about what the user is using, then jump onto their window and misbehave (or do it where it stands if it is
+        already on the window, or on the floor if the window can't be stood on, e.g. it is maximised)"""
+        if self.cfg.app_remarks: self.say(apps.remark(self.active_class), chatter=True)
+        wid = self.active_id
+        on_it = self.support == wid
+        kind = random.choice(self.mischief_kinds(edge_ok=not on_it))
+        spot = None if on_it else self.window_spot(wid, kind in (Action.PEEK, Action.DANGLE))
+        if on_it or spot is None:
+            if kind in (Action.PEEK, Action.DANGLE): kind = random.choice(self.mischief_kinds(edge_ok=False))
+            self.enter(State(action=kind)); return
+        tx, out = spot
+        jump = physics.leap(self.px + self.size / 2, self.py + self.feet, tx, self.wins[wid][1])
+        if jump is None:                                                    # too far to reach in one jump
+            self.enter(State(action=random.choice(self.mischief_kinds(edge_ok=False)))); return
+        self.vx, self.vy = jump; self.support = None
+        self.facing = 1 if tx > self.px + self.size / 2 else -1
+        self.pending_mischief = (kind, self.t + 5.0, out)
+
+    def start_pending_mischief(self, wid):
+        """it has landed on the window it was after: start the mischief (or forget it if it never got there)"""
+        if not self.pending_mischief: return
+        kind, until, out = self.pending_mischief
+        if self.t > until: self.pending_mischief = None
+        elif wid == self.active_id and self.vy >= 0:
+            self.pending_mischief = None
+            if kind in (Action.PEEK, Action.DANGLE): self.facing = out                      # looks out over the edge
+            self.enter(State(action=kind))
+
     # ---- the desktop -----------------------------------------------------
     def desktop_items(self):
         """[(path, name)] on the desktop, cached until the folder changes"""
@@ -262,13 +431,6 @@ class Pet(QWidget):
         if self.grounded and self.state.motion in (Motion.IDLE, Motion.WALK, Motion.SLEEP):
             self.enter(State(expression=Expression.HAPPY)); self.vy = -320
             self.hearts += [[random.uniform(-30, 30), 11 - self.defn.height, 1.2 + random.random() * .5] for _ in range(3)]
-
-    def open_desktop_item(self, path):
-        """open one of the things on the desktop, as if it had been double-clicked (only what is really on the desktop)"""
-        if not desktop.is_on_desktop(path): return False
-        self.say(f"Mở {desktop.entry_name(path)} nhé!", urgent=True)
-        if self.grounded and self.state.motion in (Motion.IDLE, Motion.WALK): self.vy = -320
-        return QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
     def check_reminders(self):
         """once a second: say whatever reminders have come due (held back while a fullscreen app has Quiet Mode on)"""
@@ -360,17 +522,19 @@ class Pet(QWidget):
             self.enter(State(Motion.WALK, Expression.DIZZY) if dizzy else State())
 
     def chase(self, dt, g, cx, wid):
+        if self.turning(): return
         lo, hi = physics.span(self.wins, g, wid)
         dx = max(lo, min(hi, QCursor.pos().x())) - cx
         if abs(dx) < 45:
             self.enter(State(expression=Expression.HAPPY))         # caught it!
             return
         self.facing = 1 if dx > 0 else -1
-        self.px += self.facing * 2 * self.walk_speed * self.cfg.speed * dt
+        self.px += self.facing * 2 * self.walk_speed * self.cfg.speed * self.ride_boost() * dt
 
     def walk(self, dt, g, cx, wid):
+        if self.turning(): return                                     # it doesn't shuffle sideways while turning round
         dizzy = self.state.expression is Expression.DIZZY
-        step = self.facing * self.walk_speed * self.cfg.speed * (0.6 if self.hot else 1) * dt      # too hot to hurry
+        step = self.facing * self.walk_speed * self.cfg.speed * (0.6 if self.hot else 1) * self.ride_boost() * dt      # (too hot to hurry)
         if dizzy:                                                                # half speed, swaying, changing its mind
             step = step / 2 + math.sin(self.t * 7) * 40 * dt
             if random.random() < 0.02: self.facing = -self.facing
@@ -404,10 +568,11 @@ class Pet(QWidget):
         f, sleep = -self.facing, self.state.motion is Motion.SLEEP
         stretch = self.state.action in (Action.STRETCH, Action.PUSH)             # both lean forward
         flip = self.state.action is Action.FLIP
-        key = (self.scale, f, sleep, stretch, flip, tuple((int(x), int(y)) for x, y, _ in self.hearts))
+        lively = self.state.action in (Action.STOMP, Action.PEEK, Action.DANGLE, Action.DANCE)
+        key = (self.scale, f, sleep, stretch, flip, lively, tuple((int(x), int(y)) for x, y, _ in self.hearts))
         if key == self.mask_key: return
         self.mask_key = key
-        region = silhouette(f, sleep, stretch, self.hearts, flip)
+        region = silhouette(f, sleep, stretch, self.hearts, flip, lively)
         self.setMask(region if self.scale == 1 else QTransform().scale(self.scale, self.scale).map(region))
 
     # ---- input -----------------------------------------------------------
@@ -470,9 +635,9 @@ class Pet(QWidget):
         pm = m.addMenu("Pomodoro")
         pm.addAction(self.pomo.label()).setEnabled(False)
         if not self.pomo.active: pm.addAction(f"Bắt đầu ({self.cfg.focus_min} phút)", self.start_focus)
-        elif self.pomo.paused: pm.addAction("Tiếp tục", self.pomo.resume)
-        else: pm.addAction("Tạm dừng", self.pomo.pause)
-        if self.pomo.active: pm.addAction("Đặt lại", self.pomo.reset)
+        elif self.pomo.paused: pm.addAction("Tiếp tục", self.pomo_resume)
+        else: pm.addAction("Tạm dừng", self.pomo_pause)
+        if self.pomo.active: pm.addAction("Đặt lại", self.pomo_reset)
         a = m.addAction("Chế độ yên lặng"); a.setCheckable(True); a.setChecked(self.cfg.quiet)
         a.toggled.connect(lambda on: (setattr(self.cfg, "quiet", on), self.apply_settings()))
         mm = m.addMenu("Chế độ")
@@ -487,10 +652,6 @@ class Pet(QWidget):
             rm = mm.addMenu("Xoá chế độ của tôi")
             for md in mine: rm.addAction(md.name, lambda i=md.id: self.delete_mode(i))
         m.addAction("Nhắc việc...", self.open_reminders)
-        items = self.desktop_items()
-        if items:
-            dm = m.addMenu("Mở từ màn hình nền")
-            for path, name in items[:30]: dm.addAction(name, lambda p=path: self.open_desktop_item(p))
         m.addAction("Cài đặt...", self.open_settings)
         if len(self.pets) > 1:
             who = m.addMenu("Nhân vật")

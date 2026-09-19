@@ -53,14 +53,6 @@ def test_missing_or_unreadable_folders_and_huge_ones_are_harmless(tmp_path):
     assert len(desktop.items(big)) == desktop.MAX_ITEMS
 
 
-def test_only_things_directly_on_the_desktop_count_as_on_it(desk, tmp_path):
-    assert desktop.is_on_desktop(desk / "Ghi chú.txt", desk)
-    assert not desktop.is_on_desktop(desk / ".hidden", desk)
-    assert not desktop.is_on_desktop(tmp_path / "elsewhere.txt", desk)
-    assert not desktop.is_on_desktop(desk / "Dự án" / "inner.txt", desk)
-    assert not desktop.is_on_desktop(desk / ".." / "x", desk) and not desktop.is_on_desktop(desk / "nope", desk)
-
-
 def test_summary_of_dropped_names():
     assert desktop.summary(["báo cáo.pdf"]) == "báo cáo.pdf" and desktop.summary(["a", "b", "c"]) == "3 thứ"
     assert desktop.summary([]) == "cái gì đó" and desktop.summary(["\x00", "  "]) == "cái gì đó"

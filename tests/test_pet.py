@@ -656,9 +656,9 @@ def test_time_of_day_is_read_from_the_local_clock_unless_off_or_being_handled(pe
     assert pet.hour() is None
 
 
-def test_the_default_clock_is_the_local_time_zone(pet):
-    from datetime import datetime
-    assert pet.now_hour() == datetime.now().hour
+def test_the_pet_reads_the_clock_through_datetime_now(pet):
+    from datetime import time
+    assert pet.now_hour() == 15 and pet.now_time() == time(15, 0)                  # (the tests' fixed afternoon; local time when real)
 
 
 def test_speed_setting_scales_the_walk(pet):

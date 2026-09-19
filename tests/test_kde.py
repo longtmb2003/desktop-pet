@@ -53,3 +53,24 @@ def test_fullscreen_flag_reaches_the_pet_and_a_bus_without_a_pet_ignores_it():
     bus.fullscreen(True); assert pet.fullscreen is True
     bus.fullscreen(False); assert pet.fullscreen is False
     Bus(lambda w: None).fullscreen(True)                                # no pet yet: harmless
+
+
+def test_the_active_window_report_reaches_the_pet_sanitised_and_bounded():
+    got = []
+
+    class P:
+        def set_active(self, i, c): got.append((i, c))
+    bus = Bus(lambda w: None, P())
+    bus.active("{abc-123}", "org.telegram.desktop")
+    bus.active("", "")                                                # nothing is active
+    bus.active("x" * 1000, "\x00\x1b[31mevil\n" + "y" * 500)
+    assert got[0] == ("{abc-123}", "org.telegram.desktop") and got[1] == ("", "")
+    assert len(got[2][0]) == 64 and len(got[2][1]) == 80 and "\x00" not in got[2][1] and "\n" not in got[2][1]
+    Bus(lambda w: None).active("a", "b")                              # no pet yet: harmless
+
+
+def test_a_failing_pet_never_raises_out_of_the_active_slot(caplog):
+    class P:
+        def set_active(self, i, c): raise RuntimeError("boom")
+    Bus(lambda w: None, P()).active("a", "b")
+    assert any("bad active-window report" in r.message for r in caplog.records)

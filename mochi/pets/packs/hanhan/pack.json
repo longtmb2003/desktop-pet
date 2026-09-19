@@ -1,0 +1,180 @@
+{
+ "id": "hanhan",
+ "name": "Hà Nhân",
+ "size": 240,
+ "feet": 232,
+ "height": 200,
+ "walk_speed": 42,
+ "body": "body.png",
+ "body_free": {
+  "left": "free_left.png",
+  "right": "free_right.png",
+  "both": "free_both.png"
+ },
+ "shoulders": {
+  "left": [
+   158,
+   372
+  ],
+  "right": [
+   326,
+   366
+  ]
+ },
+ "ride": {
+  "image": "ride.png",
+  "height": 170,
+  "speed": 2.0,
+  "wheels": [
+   {
+    "x": 102,
+    "y": 310,
+    "rx": 36,
+    "ry": 41,
+    "rim_x": 99,
+    "rim_y": 311,
+    "rim_rx": 24,
+    "rim_ry": 29,
+    "hub": [
+     103,
+     313
+    ],
+    "avoid": [
+     [
+      72,
+      293
+     ],
+     [
+      129,
+      280
+     ],
+     [
+      141,
+      295
+     ],
+     [
+      125,
+      340
+     ],
+     [
+      93,
+      336
+     ],
+     [
+      75,
+      320
+     ]
+    ]
+   },
+   {
+    "x": 260,
+    "y": 310,
+    "rx": 32,
+    "ry": 38,
+    "rim_x": 264,
+    "rim_y": 310,
+    "rim_rx": 22,
+    "rim_ry": 29,
+    "hub": [
+     272,
+     310
+    ],
+    "avoid": []
+   }
+  ],
+  "lines": [
+   "Ting ting!",
+   "Tránh ra, tránh ra!",
+   "Vù vù~",
+   "Đừng cản đường tôi!"
+  ]
+ },
+ "face": {
+  "box": [
+   69,
+   162,
+   198,
+   172
+  ]
+ },
+ "faces": {
+  "neutral": [
+   "faces/neutral_00.png"
+  ],
+  "talk": [
+   "faces/talk_00.png",
+   "faces/talk_01.png",
+   "faces/talk_02.png",
+   "faces/talk_03.png",
+   "faces/talk_04.png",
+   "faces/talk_05.png",
+   "faces/talk_06.png",
+   "faces/talk_07.png",
+   "faces/talk_08.png",
+   "faces/talk_09.png",
+   "faces/talk_10.png",
+   "faces/talk_11.png",
+   "faces/talk_12.png",
+   "faces/talk_13.png",
+   "faces/talk_14.png",
+   "faces/talk_15.png",
+   "faces/talk_16.png",
+   "faces/talk_17.png",
+   "faces/talk_18.png"
+  ],
+  "laugh": [
+   "faces/laugh_00.png",
+   "faces/laugh_01.png",
+   "faces/laugh_02.png",
+   "faces/laugh_03.png",
+   "faces/laugh_04.png",
+   "faces/laugh_05.png"
+  ],
+  "grin": [
+   "faces/grin_00.png"
+  ]
+ },
+ "fps": {
+  "talk": 12,
+  "laugh": 8
+ },
+ "behaviors": {
+  "idle": 4,
+  "walk": 4,
+  "sleep": 1,
+  "chase": 1,
+  "rant": 2,
+  "yawn": 1,
+  "point": 2,
+  "wag": 2,
+  "lecture": 1
+ },
+ "scold": [
+  "Làm việc đi, đừng có lười!",
+  "Nhìn cái gì mà nhìn!",
+  "Sao còn chưa lưu file hả?",
+  "Bỏ cái điện thoại xuống!",
+  "Ngồi thẳng lưng lên!",
+  "Uống nước đi, nói mãi không nghe!",
+  "Deadline đến nơi rồi kìa!",
+  "Cái mặt đó là sao hả?"
+ ],
+ "chatter": [
+  "Làm việc đi!",
+  "Sao còn chưa lưu file?",
+  "Nhìn cái gì?",
+  "Uống nước chưa hả?",
+  "Ngồi lì thế, đứng dậy đi!",
+  "Hừm...",
+  "Nghỉ mắt tí đi, đỏ hết rồi kìa"
+ ],
+ "scream": "Trời ơi!",
+ "drop": "Cái gì đây? {name}",
+ "desktop_remark": "{name}... nằm chình ình ở đó làm gì?",
+ "sway": 4,
+ "bob": 5,
+ "work_prop": "sign",
+ "looks": "left",
+ "turn": 0.3,
+ "head_bottom": 353
+}

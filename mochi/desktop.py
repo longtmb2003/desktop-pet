@@ -1,4 +1,4 @@
-"""The items on the user's desktop folder (the icons you see on the desktop): what they are called, and opening one.
+"""The items on the user's desktop folder (the icons you see on the desktop): what they are called.
 Mochi cannot know where each icon is drawn (KDE doesn't say), so it works with the folder's contents, not their positions."""
 import os
 from pathlib import Path
@@ -43,15 +43,6 @@ def items(directory=None):
     except OSError:
         return []
     return [(e, entry_name(e)) for e in entries[:MAX_ITEMS]]
-
-
-def is_on_desktop(path, directory=None):
-    """is `path` directly inside the desktop folder? (the only things Mochi will open)"""
-    d = (Path(directory) if directory else desktop_dir())
-    try:
-        return Path(path).parent.resolve() == d.resolve() and Path(path).name in {e.name for e, _ in items(d)}
-    except OSError:
-        return False
 
 
 def summary(names):

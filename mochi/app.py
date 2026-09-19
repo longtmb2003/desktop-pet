@@ -42,6 +42,8 @@ def main():
         signal.signal(sig, lambda *_: app.quit())          # `kill` / Ctrl-C -> clean exit (unloads the KWin script)
     pet = Pet()
     platform = detect(pet.set_windows, pet)
+    from .power import PowerWatcher
+    pet.attach_power(PowerWatcher(pet.on_lock, pet.on_suspend))       # asleep while the screen is locked or the computer sleeps
     platform.start()
     pet.show()
     sys.exit(app.exec())
