@@ -343,6 +343,8 @@ def test_the_raised_finger_is_on_the_same_side_of_the_screen_whichever_way_it_fa
         p = make_pet(make, tmp_path)
         p.state, p.facing, p.drawn_facing, p.t, p.dur = State(action=Action.WAG), facing, facing, 10.35, 4.0
         img = render(p)
-        is_coat, mid = (lambda c, rgb=p.defn.pack.coat.rgb(): c.rgb() == rgb), p.size // 2
-        sides[facing] = (count(img, (mid + 28, 0, p.size, p.size), is_coat), count(img, (0, 0, mid - 28, p.size), is_coat))
+        mid, rgb = p.size // 2, p.defn.pack.coat.rgb()
+        right = count(img, (mid + 28, 0, p.size, p.size), lambda c, rgb=rgb: c.rgb() == rgb)  # noqa: B023
+        left = count(img, (0, 0, mid - 28, p.size), lambda c, rgb=rgb: c.rgb() == rgb)  # noqa: B023
+        sides[facing] = (right, left)
     assert abs(sides[1][0] - sides[-1][0]) < 25 and abs(sides[1][1] - sides[-1][1]) < 25
