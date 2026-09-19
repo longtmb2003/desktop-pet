@@ -72,10 +72,14 @@ class Pet(QWidget):
                 self.py = floor                                    # ride it while it moves
             elif self.py < floor - 0.5 or self.vy < 0 or (self.state.motion is Motion.AIRBORNE and self.vx != 0):   # airborne
                 self.grounded = False
+                if self.support is not None and self.support not in self.wins and self.state.motion is not Motion.AIRBORNE:
+                    self.support, self.vx, self.vy = None, 0.0, 0.0                 # the ground vanished under its feet
+                    self.enter(State(Motion.AIRBORNE, Expression.SCARED))
                 f = physics.step_air(self.px, self.py, self.vx, self.vy, dt, floor, g)
                 self.px, self.py, self.vx, self.vy = f.x, f.y, f.vx, f.vy
                 if f.hit: self.squash = 0.3
-                if f.impact >= IMPACT_DIZZY and self.state.motion is Motion.AIRBORNE and self.state.expression is Expression.NORMAL:
+                calm_or_scared = self.state.expression in (Expression.NORMAL, Expression.SCARED)
+                if f.impact >= IMPACT_DIZZY and self.state.motion is Motion.AIRBORNE and calm_or_scared:
                     self.enter(State(Motion.AIRBORNE, Expression.DIZZY))
                 if f.landed:
                     self.support, self.grounded = wid, True

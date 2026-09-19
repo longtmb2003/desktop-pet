@@ -384,3 +384,79 @@ def test_every_visible_pixel_of_a_flipping_pet_is_clickable_and_inside_the_windo
                     if img.pixel(x, y) >> 24 > 40:
                         assert m.contains(QPoint(x, y)), (facing, k, x, y)
                         assert 0 < x < S - 1 and 0 < y < S - 1, ("clipped by the window edge", facing, k, x, y)
+
+
+# ---- losing the ground ----------------------------------------------------------------------------------------
+def standing_on_a_window(pet, height=300, motion=Motion.IDLE):
+    g = pet.screen_geo()
+    top = g.top + height
+    pet.wins = {"w": (g.left + 100, top, 500, 200)}
+    pet.px, pet.py, pet.vy, pet.vx, pet.support = g.left + 250, top - FEET, 0.0, 0.0, "w"
+    pet.enter(State(motion)); pet.tick()
+    assert pet.support == "w" and pet.grounded
+
+
+def test_the_window_vanishing_scares_the_pet_and_it_falls_at_once(pet):
+    standing_on_a_window(pet)
+    pet.set_windows({})
+    pet.tick()
+    assert pet.state == State(Motion.AIRBORNE, Expression.SCARED) and not pet.grounded and pet.support is None
+    assert pet.vy > 0 and pet.vx == 0                                   # falls straight down, immediately
+    run_until(pet, lambda: pet.state.motion is not Motion.AIRBORNE)
+    assert pet.state == State() and pet.py == floor_y(pet)              # a normal fall: lands calmly, no lasting fear
+
+
+@pytest.mark.parametrize("motion", [Motion.WALK, Motion.SLEEP])
+def test_a_walking_or_sleeping_pet_is_scared_too(pet, motion):
+    standing_on_a_window(pet, motion=motion)
+    pet.set_windows({})
+    pet.tick()
+    assert pet.state == State(Motion.AIRBORNE, Expression.SCARED)
+
+
+def test_a_high_fall_can_still_end_dizzy(pet, monkeypatch):
+    standing_on_a_window(pet)
+    monkeypatch.setattr("mochi.pet.IMPACT_DIZZY", 500)                  # make this fall count as a hard landing
+    pet.set_windows({})
+    run_until(pet, lambda: pet.state.motion is Motion.WALK)
+    assert pet.state.expression is Expression.DIZZY
+
+
+def test_a_window_that_is_merely_out_from_under_the_pet_does_not_scare_it(pet):
+    standing_on_a_window(pet)
+    g = pet.screen_geo()
+    pet.set_windows({"w": (g.left + 900, g.top + 300, 500, 200)})       # the window moved sideways, it still exists
+    seen = set()
+    run_until(pet, lambda: seen.add(pet.state.expression) or pet.grounded)
+    assert Expression.SCARED not in seen and pet.support is None       # it simply walks off the edge and falls
+
+
+def test_a_click_hop_off_a_window_is_not_scary(pet):
+    standing_on_a_window(pet)
+    pet.vy = -420; pet.enter(State(expression=Expression.HAPPY))        # what pet_it() does
+    pet.tick()
+    assert pet.state.expression is Expression.HAPPY
+
+
+def test_the_floor_never_scares_and_a_dropped_pet_is_not_scared(pet):
+    pet.px, pet.py, pet.vy, pet.vx, pet.support = 300, floor_y(pet) - 200, 0.0, 0.0, None
+    pet.enter(State(Motion.AIRBORNE))
+    seen = set()
+    run_until(pet, lambda: seen.add(pet.state.expression) or pet.state.motion is not Motion.AIRBORNE)
+    assert Expression.SCARED not in seen
+
+
+def test_the_scared_pet_paints_inside_its_mask_and_differs_from_a_calm_fall(pet):
+    from PySide6.QtCore import QPoint
+    from PySide6.QtGui import QImage, QPainter
+
+    def frame(state):
+        pet.state, pet.grounded, pet.t, pet.began, pet.dur = state, False, 10.3, 10.0, 1.0
+        pet.mask_key = None; pet.update_mask(); m = pet.mask(); pet.clearMask()
+        img = QImage(S, S, QImage.Format_ARGB32); img.fill(0)
+        pt = QPainter(img); pet.render(pt, QPoint(0, 0)); pt.end()
+        return img, m
+    scared, m = frame(State(Motion.AIRBORNE, Expression.SCARED))
+    calm, _ = frame(State(Motion.AIRBORNE))
+    assert scared != calm
+    assert all(m.contains(QPoint(x, y)) for y in range(S) for x in range(S) if scared.pixel(x, y) >> 24 > 40)
