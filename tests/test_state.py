@@ -72,3 +72,50 @@ def test_push_is_a_short_one_shot_and_ends_by_turning_round_or_sitting():
     ends = {after(s, random.Random(i)) for i in range(50)}
     assert ends == {State(Motion.WALK), State(Motion.IDLE)}
     assert all(pick_next(State(), RNG).action is not Action.PUSH for _ in range(200))    # only ever started by reaching an edge
+
+
+def freq(hour, n=4000, chase=True, cur=None):
+    cur, rng = cur or State(Motion.SLEEP), random.Random(7)
+    out = {}
+    for _ in range(n):
+        s = pick_next(cur, rng, hour=hour, chase=chase)
+        out[(s.motion, s.action)] = out.get((s.motion, s.action), 0) + 1
+    return out
+
+
+def test_after_midnight_it_is_much_more_likely_to_sleep_and_less_to_chase():
+    day, night = freq(14, cur=State(Motion.IDLE)), freq(2, cur=State(Motion.IDLE))
+    assert night[(Motion.SLEEP, Action.NONE)] > 2.5 * day[(Motion.SLEEP, Action.NONE)]
+    assert night[(Motion.WALK, Action.CHASE)] < 0.5 * day[(Motion.WALK, Action.CHASE)]
+
+
+def test_evening_only_calms_the_chasing_and_does_not_push_it_to_sleep():
+    day, eve = freq(14, cur=State(Motion.IDLE)), freq(22, cur=State(Motion.IDLE))
+    assert eve[(Motion.WALK, Action.CHASE)] < 0.5 * day[(Motion.WALK, Action.CHASE)]
+    assert abs(eve[(Motion.SLEEP, Action.NONE)] - day[(Motion.SLEEP, Action.NONE)]) < 250
+
+
+def test_no_hour_means_no_time_of_day_effect_and_boundaries_are_where_the_docs_say():
+    from mochi.state import is_night
+    assert freq(None, cur=State(Motion.IDLE)) == freq(14, cur=State(Motion.IDLE))        # 14:00 is neutral too
+    assert [h for h in range(24) if is_night(h)] == [0, 1, 2, 3, 4, 5]
+
+
+def test_chase_can_be_switched_off():
+    assert (Motion.WALK, Action.CHASE) not in freq(14, chase=False)
+    assert all(pick_next(State(), random.Random(i), chase=False).action is not Action.CHASE for i in range(300))
+
+
+def test_a_night_time_yawn_ends_in_sleep_far_more_often():
+    day = sum(after(State(action=Action.YAWN), random.Random(i), hour=14).motion is Motion.SLEEP for i in range(400))
+    night = sum(after(State(action=Action.YAWN), random.Random(i), hour=3).motion is Motion.SLEEP for i in range(400))
+    assert night > 280 and day < 240                                          # about 80% vs 50%
+
+
+def test_activity_shortens_only_the_plain_stretches():
+    rng = lambda: random.Random(3)                                           # noqa: E731
+    calm, busy = ends_at(State(), 0, rng(), 1.0), ends_at(State(), 0, rng(), 2.0)
+    assert busy == calm / 2
+    assert ends_at(State(action=Action.YAWN), 0, rng(), 3.0) == ends_at(State(action=Action.YAWN), 0, rng(), 1.0)      # reactions unchanged
+    assert ends_at(State(expression=Expression.DIZZY), 0, rng(), 3.0) == 3.5
+    assert ends_at(State(Motion.AIRBORNE), 0, rng(), 3.0) == math.inf

@@ -59,22 +59,40 @@ def duration(s):
     return _MOTION_SECS.get(s.motion)
 
 
-def pick_next(s, rng=random):
-    """a random new behaviour, never the one `s` just finished"""
+def is_night(hour):
+    """small hours (00:00-05:59) make it sleepy; the evening from 22:00 only makes it calmer"""
+    return 0 <= hour < 6
+
+
+CHASE = (Motion.WALK, Action.CHASE)
+SLEEP = (Motion.SLEEP, Action.NONE)
+
+
+def pick_next(s, rng=random, hour=None, chase=True):
+    """a random new behaviour, never the one `s` just finished. `hour` (local, 0-23) tilts the odds towards sleep in the small
+    hours and away from chasing from 22:00 on; None = no time-of-day effect. chase=False never picks a chase."""
     w = {k: v for k, v in _NEXT.items() if k != (s.motion, s.action)}
+    if not chase: w.pop(CHASE, None)
+    if hour is not None and (is_night(hour) or hour >= 22):
+        if CHASE in w: w[CHASE] *= 0.25
+        if is_night(hour) and SLEEP in w: w[SLEEP] *= 6
     motion, action = rng.choices(list(w), list(w.values()))[0]
     return State(motion, action=action)
 
 
-def after(s, rng=random):
+def after(s, rng=random, hour=None, chase=True):
     """the state that follows `s` once its timer runs out"""
     if s.expression in (Expression.HAPPY, Expression.DIZZY): return State()
-    if s.action is Action.YAWN: return State(rng.choice((Motion.SLEEP, Motion.IDLE)))    # a yawn often ends in a nap
+    if s.action is Action.YAWN:                                                       # a yawn often ends in a nap
+        return State(rng.choices((Motion.SLEEP, Motion.IDLE), (4, 1) if hour is not None and is_night(hour) else (1, 1))[0])
     if s.action is Action.PUSH: return State(rng.choice((Motion.WALK, Motion.IDLE)))     # gives up: turns round or sits down
-    return pick_next(s, rng)
+    return pick_next(s, rng, hour, chase)
 
 
-def ends_at(s, now, rng=random):
-    """absolute time `s` ends, `math.inf` if it never does"""
+def ends_at(s, now, rng=random, activity=1.0):
+    """absolute time `s` ends, `math.inf` if it never does. `activity` > 1 makes the pet change what it's doing more often (only
+    the idle/walk/sleep stretches are scaled; one-shot animations and reactions keep their length)"""
     d = duration(s)
-    return now + rng.uniform(*d) if d else math.inf
+    if not d: return math.inf
+    scale = 1 / activity if s.action is Action.NONE and s.expression is Expression.NORMAL else 1.0
+    return now + rng.uniform(*d) * scale

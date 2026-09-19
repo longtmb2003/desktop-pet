@@ -2,6 +2,7 @@
 import math
 import random
 import time
+from datetime import datetime
 
 from PySide6.QtCore import QElapsedTimer, QPoint, Qt, QTimer
 from PySide6.QtGui import QCursor, QGuiApplication, QPainter
@@ -40,6 +41,7 @@ class Pet(QWidget):
         self.enter(State(Motion.AIRBORNE))
         self.clock = QElapsedTimer(); self.clock.start()   # real frame time, see tick()
         self.pomo = Pomodoro()
+        self.last_touch, self.now_hour = -1e9, lambda: datetime.now().hour      # local time zone; tests replace now_hour
         self.bubble, self.fullscreen = SpeechBubble(), False    # fullscreen: pushed by the platform (kwin.js)
         self.next_chat = random.uniform(60, 180)
         self.click_timer = QTimer(self, singleShot=True, interval=CLICK_DELAY_MS, timeout=self.pet_it)
@@ -53,7 +55,7 @@ class Pet(QWidget):
     # ---- behaviour -------------------------------------------------------
     def enter(self, state):
         self.state = state
-        self.until = ends_at(state, self.t)
+        self.until = ends_at(state, self.t, activity=self.cfg.activity)
         self.began, self.dur = self.t, max(min(self.until - self.t, 1e9), 1e-3)   # for one-shot animations
         if state.motion is Motion.WALK and state.action is Action.NONE:
             self.facing = random.choice((-1, 1))
@@ -105,7 +107,7 @@ class Pet(QWidget):
                         self.walk(dt, g, cx, wid)                           # (a PUSH stands still)
             if self.t > self.until:
                 edge = self.facing if self.state.action is Action.PUSH else 0
-                nxt = after(self.state)
+                nxt = after(self.state, hour=self.hour(), chase=self.cfg.chase)
                 self.enter(State(action=Action.WORK) if self.pomo.focusing and self.grounded else nxt)   # focus: back to the laptop
                 if edge: self.facing = -edge                                # after shoving the edge, never walk straight back into it
             self.move(int(self.px), int(self.py))
@@ -116,6 +118,11 @@ class Pet(QWidget):
         if self.bubble.isVisible(): self.bubble.follow(self.px, self.py, self.screen_geo())
         self.update_mask()
         self.update()
+
+    def hour(self):
+        """local hour for time-of-day habits, or None when they don't apply: switched off, or the user is playing with the pet
+        (it is never nudged to sleep while being handled)"""
+        return self.now_hour() if self.cfg.time_of_day and self.t - self.last_touch > 60 else None
 
     def start_focus(self, minutes=None):
         """begin a Pomodoro: `minutes` of focus (default from Settings), then a break"""
@@ -164,11 +171,11 @@ class Pet(QWidget):
             self.enter(State(expression=Expression.HAPPY))         # caught it!
             return
         self.facing = 1 if dx > 0 else -1
-        self.px += self.facing * 2 * WALK_SPEED * dt
+        self.px += self.facing * 2 * WALK_SPEED * self.cfg.speed * dt
 
     def walk(self, dt, g, cx, wid):
         dizzy = self.state.expression is Expression.DIZZY
-        step = self.facing * WALK_SPEED * dt
+        step = self.facing * WALK_SPEED * self.cfg.speed * dt
         if dizzy:                                                                # half speed, swaying, changing its mind
             step = step / 2 + math.sin(self.t * 7) * 40 * dt
             if random.random() < 0.02: self.facing = -self.facing
@@ -210,6 +217,7 @@ class Pet(QWidget):
         self.press, self.moved, self.off = g, False, g - self.pos()
         self.drag.reset(); self.drag.add(time.monotonic(), g.x(), g.y())
         self.shaken = False
+        self.last_touch = self.t
 
     def mouseMoveEvent(self, e):
         if self.press is None: return

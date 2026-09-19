@@ -642,3 +642,39 @@ def test_the_laptop_pose_paints_inside_its_mask(pet):
             img = QImage(S, S, QImage.Format_ARGB32); img.fill(0)
             pt = QPainter(img); pet.render(pt, QPoint(0, 0)); pt.end()
             assert all(m.contains(QPoint(x, y)) for y in range(S) for x in range(S) if img.pixel(x, y) >> 24 > 40)
+
+
+# ---- settings that change behaviour ----------------------------------------------------------------------------
+def test_time_of_day_is_read_from_the_local_clock_unless_off_or_being_handled(pet):
+    pet.now_hour = lambda: 3
+    pet.t = 1000.0
+    assert pet.hour() == 3
+    pet.last_touch = pet.t - 5                                       # just played with: never nudged to sleep
+    assert pet.hour() is None
+    pet.last_touch = -1e9; pet.cfg.time_of_day = False
+    assert pet.hour() is None
+
+
+def test_the_default_clock_is_the_local_time_zone(pet):
+    from datetime import datetime
+    assert pet.now_hour() == datetime.now().hour
+
+
+def test_speed_setting_scales_the_walk(pet):
+    def walked(speed):
+        pet.cfg.speed = speed
+        on_the_floor(pet); pet.enter(State(Motion.WALK)); pet.facing = 1
+        g = pet.screen_geo(); pet.px = g.left + 400; x0 = pet.px
+        for _ in range(10): pet.tick()
+        return pet.px - x0
+    slow, fast = walked(1.0), walked(2.0)
+    assert fast == pytest.approx(2 * slow, rel=0.05)
+
+
+def test_chase_switch_reaches_the_behaviour_picker(pet, monkeypatch):
+    seen = {}
+    import mochi.pet as mp
+    monkeypatch.setattr(mp, "after", lambda s, **kw: seen.update(kw) or State())
+    pet.cfg.chase = False
+    on_the_floor(pet); pet.enter(State()); pet.until = 0.0; pet.tick()
+    assert seen["chase"] is False and "hour" in seen
