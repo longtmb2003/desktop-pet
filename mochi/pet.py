@@ -8,6 +8,7 @@ from PySide6.QtGui import QCursor, QGuiApplication, QPainter
 from PySide6.QtWidgets import QApplication, QMenu, QWidget
 
 from . import autostart, physics
+from .bubble import SpeechBubble
 from .physics import FEET, IMPACT_DIZZY, S, THROW_MIN, WALK_SPEED, Bounds, DragTracker
 from .renderer import THEMES, paint, silhouette
 from .settings import Settings
@@ -15,6 +16,7 @@ from .state import Action, Expression, Motion, State, after, ends_at
 
 PUSH_CHANCE = 0.5                  # of the edge encounters that aren't a hop off, how many are a push against the "wall"
 CLICK_DELAY_MS = 250                # a click waits this long for a second click before it counts as a pet
+CHATTER = ("Meo~", "Bạn uống nước chưa?", "Nghỉ mắt một chút nhé!", "Mochi ở đây nè", "Nhớ lưu file nha", "Vươn vai một cái đi!")
 MAX_DT = 0.05                       # cap one frame's time step so a stall can't launch the pet through a window
 
 
@@ -35,6 +37,8 @@ class Pet(QWidget):
         self.px, self.py = random.uniform(g.left + 80, g.right - 240), g.top - 100
         self.enter(State(Motion.AIRBORNE))
         self.clock = QElapsedTimer(); self.clock.start()   # real frame time, see tick()
+        self.bubble, self.fullscreen = SpeechBubble(), False    # fullscreen: pushed by the platform (kwin.js)
+        self.next_chat = random.uniform(60, 180)
         self.click_timer = QTimer(self, singleShot=True, interval=CLICK_DELAY_MS, timeout=self.pet_it)
         self.timer = QTimer(self, interval=33, timeout=self.tick)
         self.timer.start()
@@ -76,6 +80,7 @@ class Pet(QWidget):
                 if self.support is not None and self.support not in self.wins and self.state.motion is not Motion.AIRBORNE:
                     self.support, self.vx, self.vy = None, 0.0, 0.0                 # the ground vanished under its feet
                     self.enter(State(Motion.AIRBORNE, Expression.SCARED))
+                    self.say("Á!", urgent=True)
                 f = physics.step_air(self.px, self.py, self.vx, self.vy, dt, floor, g)
                 self.px, self.py, self.vx, self.vy = f.x, f.y, f.vx, f.vy
                 if f.hit: self.squash = 0.3
@@ -100,8 +105,26 @@ class Pet(QWidget):
                 self.enter(after(self.state))
                 if edge: self.facing = -edge                                # after shoving the edge, never walk straight back into it
             self.move(int(self.px), int(self.py))
+        if self.t > self.next_chat:
+            self.next_chat = self.t + random.uniform(120, 300)
+            if self.state.motion in (Motion.IDLE, Motion.WALK): self.say(random.choice(CHATTER), chatter=True)
+        if self.bubble.isVisible(): self.bubble.follow(self.px, self.py, self.screen_geo())
         self.update_mask()
         self.update()
+
+    @property
+    def quiet(self):
+        """Quiet Mode: switched on by the user, or automatically while a fullscreen app is up (if allowed)"""
+        return self.cfg.quiet or (self.cfg.quiet_auto and self.fullscreen)
+
+    def say(self, text, urgent=False, chatter=False):
+        """show a speech bubble; unprompted chatter is suppressed in Quiet Mode or when switched off"""
+        if chatter and (self.quiet or not self.cfg.chatter): return
+        self.bubble.say(text, urgent)
+
+    def closeEvent(self, e):
+        self.bubble.close()
+        super().closeEvent(e)
 
     def throw(self, vx, vy):
         """let go of the pet: a fast enough mouse movement carries over as velocity, otherwise it just drops"""

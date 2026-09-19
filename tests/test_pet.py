@@ -519,3 +519,50 @@ def test_the_pushing_pet_paints_inside_its_mask(pet, facing):
             for x in range(S):
                 if img.pixel(x, y) >> 24 > 40:
                     assert m.contains(QPoint(x, y)), (facing, k, x, y)
+
+
+# ---- speech bubble ---------------------------------------------------------------------------------------------
+def test_losing_the_ground_makes_the_pet_yell(pet):
+    standing_on_a_window(pet)
+    pet.set_windows({})
+    pet.tick()
+    assert pet.bubble.isVisible() and pet.bubble.lines == "Á!"
+    assert (pet.width(), pet.height()) == (S, S)                        # the bubble never enlarges the pet window
+
+
+def test_chatter_is_suppressed_by_quiet_mode_and_by_its_own_switch_but_urgent_speech_is_not(pet):
+    pet.cfg.quiet = True
+    pet.say("lảm nhảm", chatter=True); assert not pet.bubble.isVisible()
+    pet.say("Á!", urgent=True); assert pet.bubble.isVisible()          # quiet only silences unprompted talk
+    pet.bubble.dismiss()
+    pet.cfg.quiet, pet.cfg.chatter = False, False
+    pet.say("lảm nhảm", chatter=True); assert not pet.bubble.isVisible()
+    pet.cfg.chatter = True
+    pet.say("lảm nhảm", chatter=True); assert pet.bubble.isVisible()
+
+
+def test_a_fullscreen_app_means_quiet_unless_that_is_switched_off(pet):
+    assert not pet.quiet
+    pet.fullscreen = True
+    assert pet.quiet
+    pet.cfg.quiet_auto = False
+    assert not pet.quiet
+    pet.cfg.quiet = True
+    assert pet.quiet
+
+
+def test_the_bubble_follows_the_pet_and_stays_on_screen(pet):
+    pet.say("xin chào", urgent=True)
+    g = pet.screen_geo()
+    for px in (g.left - 50, g.left + 400, g.right - 20):
+        pet.px, pet.py = px, g.top + 200
+        pet.tick()
+        b = pet.bubble
+        assert g.left <= b.x() and b.x() + b.width() <= g.right + 1
+
+
+def test_a_random_remark_turns_up_now_and_then_when_idle(pet, monkeypatch):
+    pet.enter(State()); pet.next_chat = 0.0
+    monkeypatch.setattr("mochi.pet.random.choice", lambda seq: seq[0])
+    pet.tick()
+    assert pet.bubble.isVisible() and pet.next_chat > pet.t + 100       # and the next one is minutes away, not seconds
