@@ -1,16 +1,20 @@
 """The pet widget: what it does next, per-frame physics, and mouse input."""
+import math
 import random
+import time
 
 from PySide6.QtCore import QElapsedTimer, QPoint, Qt, QTimer
 from PySide6.QtGui import QCursor, QGuiApplication, QPainter
 from PySide6.QtWidgets import QApplication, QMenu, QWidget
 
 from . import autostart, physics
-from .physics import FEET, GRAVITY, S, WALK_SPEED, Bounds
+from .physics import FEET, IMPACT_DIZZY, S, THROW_MIN, WALK_SPEED, Bounds, DragTracker
 from .renderer import THEMES, paint, silhouette
 from .settings import Settings
 from .state import Action, Expression, Motion, State, after, ends_at
 
+PUSH_CHANCE = 0.5                  # of the edge encounters that aren't a hop off, how many are a push against the "wall"
+CLICK_DELAY_MS = 250                # a click waits this long for a second click before it counts as a pet
 MAX_DT = 0.05                       # cap one frame's time step so a stall can't launch the pet through a window
 
 
@@ -24,13 +28,14 @@ class Pet(QWidget):
         self.facing, self.hearts = 1, []            # hearts: [x, y, life]
         self.wins, self.support, self.vx, self.grounded = {}, None, 0.0, False   # wins: id -> (x, y, w, h); support: id we stand on
         self.next_blink, self.moved, self.press, self.mask_key = 2.0, False, None, None
-        self.paused = False
+        self.paused, self.drag, self.shaken = False, DragTracker(), False
         self.cfg = settings or Settings()
         self.theme = self.cfg.theme
         g = self.screen_geo()
         self.px, self.py = random.uniform(g.left + 80, g.right - 240), g.top - 100
         self.enter(State(Motion.AIRBORNE))
         self.clock = QElapsedTimer(); self.clock.start()   # real frame time, see tick()
+        self.click_timer = QTimer(self, singleShot=True, interval=CLICK_DELAY_MS, timeout=self.pet_it)
         self.timer = QTimer(self, interval=33, timeout=self.tick)
         self.timer.start()
         QGuiApplication.instance().screenRemoved.connect(lambda _: QTimer.singleShot(0, self.ensure_visible))
@@ -66,29 +71,49 @@ class Pet(QWidget):
             riding = wid is not None and wid == self.support and self.vy >= 0   # already standing on this window
             if riding:
                 self.py = floor                                    # ride it while it moves
-            elif self.py < floor - 0.5 or self.vy < 0:             # airborne
+            elif self.py < floor - 0.5 or self.vy < 0 or (self.state.motion is Motion.AIRBORNE and self.vx != 0):   # airborne
                 self.grounded = False
-                self.vy += GRAVITY * dt
-                self.py += self.vy * dt
-                self.px = max(g.left - 40, min(g.right - S + 40, self.px + self.vx * dt))
-                if self.py >= floor:
-                    self.py, self.vy, self.vx, self.squash, self.support, self.grounded = floor, 0.0, 0.0, 0.3, wid, True
-                    if self.state.motion is Motion.AIRBORNE:
-                        self.enter(State())
+                if self.support is not None and self.support not in self.wins and self.state.motion is not Motion.AIRBORNE:
+                    self.support, self.vx, self.vy = None, 0.0, 0.0                 # the ground vanished under its feet
+                    self.enter(State(Motion.AIRBORNE, Expression.SCARED))
+                f = physics.step_air(self.px, self.py, self.vx, self.vy, dt, floor, g)
+                self.px, self.py, self.vx, self.vy = f.x, f.y, f.vx, f.vy
+                if f.hit: self.squash = 0.3
+                calm_or_scared = self.state.expression in (Expression.NORMAL, Expression.SCARED)
+                if f.impact >= IMPACT_DIZZY and self.state.motion is Motion.AIRBORNE and calm_or_scared:
+                    self.enter(State(Motion.AIRBORNE, Expression.DIZZY))
+                if f.landed:
+                    self.support, self.grounded = wid, True
+                    self.land()
             else:
                 self.support, riding = wid, True
+                self.land()
             if riding:                                             # on the floor or a window: free to move
                 self.grounded = True
                 if self.state.motion is Motion.WALK:
                     if self.state.action is Action.CHASE:
                         self.chase(dt, g, cx, wid)
-                    else:
-                        self.walk(dt, g, cx, wid)
+                    elif self.state.action is Action.NONE:
+                        self.walk(dt, g, cx, wid)                           # (a PUSH stands still)
             if self.t > self.until:
+                edge = self.facing if self.state.action is Action.PUSH else 0
                 self.enter(after(self.state))
+                if edge: self.facing = -edge                                # after shoving the edge, never walk straight back into it
             self.move(int(self.px), int(self.py))
         self.update_mask()
         self.update()
+
+    def throw(self, vx, vy):
+        """let go of the pet: a fast enough mouse movement carries over as velocity, otherwise it just drops"""
+        if math.hypot(vx, vy) < THROW_MIN: vx = vy = 0.0
+        self.vx, self.vy = vx, vy
+        self.enter(State(Motion.AIRBORNE, self.state.expression))       # a shaken pet keeps its dizziness
+
+    def land(self):
+        """the pet came to rest on a surface: an AIRBORNE fall ends (a walker that hopped keeps walking)"""
+        if self.state.motion is Motion.AIRBORNE:
+            dizzy = self.state.expression is Expression.DIZZY            # a hard landing: get up and stagger about
+            self.enter(State(Motion.WALK, Expression.DIZZY) if dizzy else State())
 
     def chase(self, dt, g, cx, wid):
         lo, hi = physics.span(self.wins, g, wid)
@@ -100,15 +125,23 @@ class Pet(QWidget):
         self.px += self.facing * 2 * WALK_SPEED * dt
 
     def walk(self, dt, g, cx, wid):
+        dizzy = self.state.expression is Expression.DIZZY
         step = self.facing * WALK_SPEED * dt
+        if dizzy:                                                                # half speed, swaying, changing its mind
+            step = step / 2 + math.sin(self.t * 7) * 40 * dt
+            if random.random() < 0.02: self.facing = -self.facing
         self.px += step; cx += step
         lo, hi = physics.span(self.wins, g, wid)
-        if wid is None and random.random() < 0.004:                              # on the floor: sometimes hop onto a nearby window
+        if wid is None and not dizzy and random.random() < 0.004:                              # floor: sometimes hop onto a window
             self.hop_to(cx, self.py + FEET, g)
         if cx < lo or cx > hi:
             out = -1 if cx < lo else 1
-            if wid is not None and random.random() < 0.4:          # hop off the window edge
+            if wid is not None and not dizzy and random.random() < 0.4:      # hop off the window edge
                 self.facing, self.vx, self.vy, self.support = out, out * 140, -260, None
+            elif not dizzy and random.random() < PUSH_CHANCE:
+                self.px = (lo if out < 0 else hi) - S / 2                   # stop at the edge and shove against it
+                self.facing = out
+                self.enter(State(Motion.WALK, action=Action.PUSH))
             else:
                 self.facing = -out
 
@@ -120,17 +153,21 @@ class Pet(QWidget):
 
     def update_mask(self):
         # clip the window to the pet's silhouette so clicks pass through the transparent rest
-        f, sleep, stretch = -self.facing, self.state.motion is Motion.SLEEP, self.state.action is Action.STRETCH
-        key = (f, sleep, stretch, tuple((int(x), int(y)) for x, y, _ in self.hearts))
+        f, sleep = -self.facing, self.state.motion is Motion.SLEEP
+        stretch = self.state.action in (Action.STRETCH, Action.PUSH)             # both lean forward
+        flip = self.state.action is Action.FLIP
+        key = (f, sleep, stretch, flip, tuple((int(x), int(y)) for x, y, _ in self.hearts))
         if key == self.mask_key: return
         self.mask_key = key
-        self.setMask(silhouette(f, sleep, stretch, self.hearts))
+        self.setMask(silhouette(f, sleep, stretch, self.hearts, flip))
 
     # ---- input -----------------------------------------------------------
     def mousePressEvent(self, e):
         if e.button() != Qt.LeftButton: return
         g = e.globalPosition().toPoint()
         self.press, self.moved, self.off = g, False, g - self.pos()
+        self.drag.reset(); self.drag.add(time.monotonic(), g.x(), g.y())
+        self.shaken = False
 
     def mouseMoveEvent(self, e):
         if self.press is None: return
@@ -140,6 +177,11 @@ class Pet(QWidget):
             self.support, self.vx = None, 0.0
             self.enter(State(Motion.DRAG))
         if self.moved:
+            now = time.monotonic()
+            self.drag.add(now, g.x(), g.y())
+            if not self.shaken and physics.is_shake(self.drag.trail, now):
+                self.shaken = True
+                self.enter(State(Motion.DRAG, Expression.DIZZY))         # shaken silly; it stays dizzy after the release
             p = g - self.off
             self.px, self.py, self.vy = p.x(), p.y(), 0.0
             self.move(p)
@@ -148,11 +190,22 @@ class Pet(QWidget):
         if self.press is None: return
         self.press = None
         if self.moved:
-            self.enter(State(Motion.AIRBORNE))
-        else:                                                # a click = a pet
-            self.enter(State(expression=Expression.HAPPY))
-            self.vy = -420
-            self.hearts += [[random.uniform(-30, 30), -95, 1.2 + random.random() * .5] for _ in range(4)]
+            self.throw(*self.drag.velocity(time.monotonic()))
+        else:
+            self.click_timer.start()                         # a click = a pet, unless a second click turns it into a flip
+
+    def pet_it(self):
+        if self.press is not None or self.state.motion is Motion.DRAG or self.state.action is Action.FLIP: return
+        self.enter(State(expression=Expression.HAPPY))
+        self.vy = -420
+        self.hearts += [[random.uniform(-30, 30), -95, 1.2 + random.random() * .5] for _ in range(4)]
+
+    def mouseDoubleClickEvent(self, e):
+        self.click_timer.stop()                              # the first click's pet never happens
+        if e.button() != Qt.LeftButton or not self.grounded or self.state.motion in (Motion.DRAG, Motion.AIRBORNE): return
+        self.enter(State(action=Action.FLIP))
+        self.vy = -physics.GRAVITY * self.dur / 2            # airborne for exactly the length of the flip
+        self.hearts = []
 
     def contextMenuEvent(self, e):
         m = QMenu(self)

@@ -23,9 +23,19 @@ def heart(s):
     return p
 
 
-def silhouette(f, sleep, stretch, hearts):
+def star(r):
+    p = QPainterPath()
+    for i in range(10):
+        a, rr = -math.pi / 2 + i * math.pi / 5, r if i % 2 == 0 else r * .45
+        p.lineTo(rr * math.cos(a), rr * math.sin(a)) if i else p.moveTo(rr * math.cos(a), rr * math.sin(a))
+    p.closeSubpath()
+    return p
+
+
+def silhouette(f, sleep, stretch, hearts, flip=False):
     """Region of the pet window that should catch clicks; the rest is click-through. f = -facing."""
     c = S // 2
+    if flip: return QRegion(c - 110, FEET - 62 - 110, 220, 220, QRegion.Ellipse)    # a turning pet sweeps a circle around its middle
     r = QRegion(c - 72, FEET - 88, 144, 100, QRegion.Ellipse)                   # body
     r += QRegion(c - 66, FEET - 106, 132, 60)                                  # ears
     r += QRegion(c - 60, FEET - 14, 120, 28)                                    # feet + shadow
@@ -43,6 +53,7 @@ def paint(pet, p):
     t, state = pet.t, pet.state
     motion, act = state.motion, state.action
     happy, sleep, drag = state.expression is Expression.HAPPY, motion is Motion.SLEEP, motion is Motion.DRAG
+    dizzy, scared = state.expression is Expression.DIZZY, state.expression is Expression.SCARED
     walking = motion is Motion.WALK and act is Action.NONE          # a chase runs, it doesn't use the walk cycle
     up = motion in (Motion.AIRBORNE, Motion.DRAG)
     th = THEMES[pet.theme]
@@ -59,9 +70,13 @@ def paint(pet, p):
     if act is Action.STRETCH: sy -= .14 * o; tilt = 4 * o; shift = 8 * o                           # stretch forward, bum up
     elif act is Action.YAWN: sy += .05 * o; tilt = -5 * o
     elif act is Action.CHASE: hop = abs(math.sin(t * 14)) * 9
+    elif act is Action.PUSH: tilt = 9 + 2 * math.sin(t * 14); shift = 3               # leaning into the wall, shoving
+    if scared: shift += math.sin(t * 45) * 1.5                                                    # trembling
     sy -= pet.squash
     sx = 2 - sy if not drag else .94        # keep volume: taller = thinner
     p.translate(shift * pet.facing, -hop)
+    if act is Action.FLIP:                                                                         # one full turn about the body's middle
+        p.translate(0, -62); p.rotate(360 * min(1, (t - pet.began) / pet.dur) * pet.facing); p.translate(0, 62)
     p.rotate(tilt * pet.facing)
     p.scale(-sx * pet.facing, sy)                               # tail trails behind the walking direction
 
@@ -87,7 +102,8 @@ def paint(pet, p):
 
     # feet
     for i, m in enumerate((-1, 1)):
-        if up: blob(TAIL, m * 18, 6 + math.sin(t * 8 + i * 2) * 3, 9, 10)
+        if scared: blob(TAIL, m * 18, 6 + math.sin(t * 24 + i * math.pi) * 8, 9, 10)          # legs pedalling the air
+        elif up: blob(TAIL, m * 18, 6 + math.sin(t * 8 + i * 2) * 3, 9, 10)
         else:  blob(TAIL, m * 20, -5 - (max(0, math.sin(t * 9 + i * math.pi)) * 5 if walking else 0), 13, 8)
 
     # body
@@ -101,7 +117,12 @@ def paint(pet, p):
     lx, ly = max(-1, min(1, cur.x() / 250)) * -2.5 * pet.facing, max(-1, min(1, cur.y() / 250)) * 1.5
     pen = QPen(DARK, 3, Qt.SolidLine, Qt.RoundCap)
     for x in (-19, 19):
-        if sleep or act in (Action.YAWN, Action.STRETCH, Action.GROOM) or pet.blink > 0:
+        if scared:                                                         # wide eyes, tiny pupils
+            p.setPen(QPen(DARK, 2)); p.setBrush(Qt.white); p.drawEllipse(QPointF(x, -46), 9.5, 11)
+            blob(DARK, x + lx * .4, -46 + ly * .4, 2.5, 3); continue
+        if dizzy:                                                          # X eyes
+            arc = QPainterPath(QPointF(x - 6, -52)); arc.lineTo(x + 6, -40); arc.moveTo(x + 6, -52); arc.lineTo(x - 6, -40)
+        elif sleep or act in (Action.YAWN, Action.STRETCH, Action.GROOM, Action.PUSH) or pet.blink > 0:
             arc = QPainterPath(QPointF(x - 7, -46)); arc.quadTo(x, -40, x + 7, -46)
         elif happy:
             arc = QPainterPath(QPointF(x - 7, -43)); arc.quadTo(x, -53, x + 7, -43)
@@ -111,13 +132,18 @@ def paint(pet, p):
             blob(Qt.white, x + lx * 1.6 - 2.5, -49 + ly, 3, 3); blob(Qt.white, x + lx + 3, -42 + ly, 1.5, 1.5)
             continue
         p.setPen(pen); p.setBrush(Qt.NoBrush); p.drawPath(arc)
-    if drag: blob(DARK, 0, -35, 3, 4)
+    if scared: blob(PINK.darker(150), 0, -32, 4.5, 6.5)
+    elif drag: blob(DARK, 0, -35, 3, 4)
     elif happy: blob(PINK.darker(130), 0, -35, 4, 4.5)
+    elif dizzy: blob(PINK.darker(150), 0, -34, 3.5, 3)
+    elif act is Action.PUSH: blob(PINK.darker(150), 0, -34, 5, 2.5)
     elif act is Action.YAWN: blob(PINK.darker(150), 0, -33, 4 + 3 * o, 2 + 8 * o)
     else:
         mouth = QPainterPath(QPointF(-5, -38)); mouth.quadTo(-2.5, -33, 0, -38); mouth.quadTo(2.5, -33, 5, -38)
         p.setPen(QPen(DARK, 2, Qt.SolidLine, Qt.RoundCap)); p.setBrush(Qt.NoBrush); p.drawPath(mouth)
 
+    if act is Action.PUSH:                                           # both paws flat against the wall in front
+        for dy in (-30, -16): blob(TAIL, -50 + 1.5 * math.sin(t * 14), dy, 8, 9)
     if act is Action.GROOM:                                          # lick a paw, stroke the cheek
         lift = (.5 + .5 * math.sin(t * 9)) * min(1, o * 3)
         blob(TAIL, 27 - 5 * lift, -16 - 22 * lift, 8, 10)
@@ -132,6 +158,15 @@ def paint(pet, p):
             f.setPointSizeF(9 + ph * 7); p.setFont(f)
             p.setPen(QColor(122, 134, 201, int(math.sin(ph * math.pi) * 230)))
             p.drawText(QPointF(34 + ph * 22, -84 - ph * 30), "z")
+    if dizzy:                                                          # stars circling the head
+        p.setPen(Qt.NoPen); p.setBrush(QColor("#ffcf5a"))
+        for i in range(3):
+            a = t * 5 + i * 2.094
+            p.save(); p.translate(34 * math.cos(a), -104 + 9 * math.sin(a)); p.rotate(t * 90); p.drawPath(star(5)); p.restore()
+    if scared:                                                         # a sweat drop flicking off the forehead
+        ph = (t * 2.5) % 1
+        p.setPen(Qt.NoPen); p.setBrush(QColor(110, 185, 255, int((1 - ph) * 230)))
+        p.drawEllipse(QPointF(46 + ph * 8, -92 + ph * 26), 3, 4.5)
     for x, y, life in pet.hearts:
         p.setPen(Qt.NoPen); p.setBrush(QColor(255, 111, 145, int(min(1, life) * 230)))
         p.save(); p.translate(x, y); p.drawPath(heart(5 + 3 * math.sin(life * 6))); p.restore()

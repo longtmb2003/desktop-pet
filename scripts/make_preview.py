@@ -15,7 +15,8 @@ from mochi.renderer import THEMES, paint  # noqa: E402
 from mochi.state import Action, Expression, Motion, State  # noqa: E402
 
 POSES = [("idle", State()), ("happy", State(expression=Expression.HAPPY)), ("sleep", State(Motion.SLEEP)),
-         ("yawn", State(action=Action.YAWN)), ("stretch", State(action=Action.STRETCH)), ("groom", State(action=Action.GROOM))]
+         ("yawn", State(action=Action.YAWN)), ("stretch", State(action=Action.STRETCH)), ("groom", State(action=Action.GROOM)),
+         ("dizzy", State(Motion.WALK, Expression.DIZZY))]
 LABEL, HEAD = 84, 26
 
 app = QApplication([])
