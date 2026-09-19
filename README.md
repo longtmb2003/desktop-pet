@@ -93,7 +93,7 @@ faces/*.png      các khuôn mặt vẽ đè lên (nét mực trên nền trong 
 
 Mochi chỉ đọc gói, không chạy code trong đó. Gói sai (thiếu ảnh, số lạ, đường dẫn chui ra ngoài thư mục) bị bỏ qua kèm cảnh báo, không làm Mochi hỏng. Ảnh chỉ được chuyển động bằng phép biến đổi (nhún, nghiêng, lộn, nằm xuống) và đổi mặt; biểu cảm ngủ và chóng mặt do Mochi tự vẽ lên khuôn mặt.
 
-`scripts/make_hanhan.py` là ví dụ dựng một gói từ hai ảnh nguồn (cắt nền, xoá mặt gốc, biến bảng biểu cảm thành lớp mặt trong suốt). Các ảnh nguồn của Hà Nhân không nằm trong repo này (không rõ giấy phép), nên gói `hanhan` chỉ có trên máy đã chạy script đó.
+`scripts/make_hanhan.py` là ví dụ dựng một gói từ hai ảnh nguồn (cắt nền, xoá mặt gốc, biến bảng biểu cảm thành lớp mặt trong suốt). Hà Nhân là nhân vật hư cấu do AI tạo ra; ảnh nguồn nằm trong `packaging/` và gói đã dựng sẵn nằm trong `mochi/pets/packs/hanhan/`.
 
 ## API DBus cho chương trình khác
 

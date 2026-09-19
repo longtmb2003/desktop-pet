@@ -1,6 +1,6 @@
 """Build the Hà Nhân sprite pack into mochi/pets/packs/hanhan/ from the two source images in packaging/:
   "hà nhân.jpg"              the whole figure on white   -> body.png (white background cut out, own face blanked) + faces/neutral.png
-  "biểu cảm mặt hà nhân"     a 5x5 sheet of head frames  -> faces/talk_*.png (frames 3911-3929) and faces/laugh_*.png (3930-3935)
+  "biểu cảm mặt hà nhân.png" a 5x5 sheet of head frames  -> faces/talk_*.png (frames 3911-3929) and faces/laugh_*.png (3930-3935)
 Faces become transparent ink overlays (dark strokes; the alpha is the darkness) registered to the body's own face, so any expression
 can be laid over the blank head. Run from anywhere:  python scripts/make_hanhan.py  [--preview out.png]"""
 import json
@@ -12,7 +12,7 @@ from PySide6.QtCore import QRect, QRectF, Qt
 from PySide6.QtGui import QColor, QGuiApplication, QImage, QPainter
 
 ROOT = Path(__file__).resolve().parent.parent
-SRC_BODY, SRC_SHEET = ROOT / "packaging" / "hà nhân.jpg", ROOT / "packaging" / "biểu cảm mặt hà nhân"
+SRC_BODY, SRC_SHEET = ROOT / "packaging" / "hà nhân.jpg", ROOT / "packaging" / "biểu cảm mặt hà nhân.png"
 OUT = ROOT / "mochi" / "pets" / "packs" / "hanhan"
 
 BG_LUM = 232                                        # brighter than this and connected to the border = background

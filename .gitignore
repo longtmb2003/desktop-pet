@@ -219,8 +219,3 @@ __marimo__/
 
 # Mochi build venv
 .venv-build/
-
-# third-party artwork supplied by the user (licence unknown): kept on this machine, never committed or redistributed
-mochi/pets/packs/
-packaging/hà nhân.jpg
-packaging/biểu cảm mặt hà nhân

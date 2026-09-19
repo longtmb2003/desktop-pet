@@ -1,0 +1,77 @@
+{
+ "id": "hanhan",
+ "name": "Hà Nhân",
+ "size": 240,
+ "feet": 232,
+ "height": 200,
+ "walk_speed": 42,
+ "body": "body.png",
+ "face": {
+  "box": [
+   69,
+   162,
+   198,
+   172
+  ]
+ },
+ "faces": {
+  "neutral": [
+   "faces/neutral_00.png"
+  ],
+  "talk": [
+   "faces/talk_00.png",
+   "faces/talk_01.png",
+   "faces/talk_02.png",
+   "faces/talk_03.png",
+   "faces/talk_04.png",
+   "faces/talk_05.png",
+   "faces/talk_06.png",
+   "faces/talk_07.png",
+   "faces/talk_08.png",
+   "faces/talk_09.png",
+   "faces/talk_10.png",
+   "faces/talk_11.png",
+   "faces/talk_12.png",
+   "faces/talk_13.png",
+   "faces/talk_14.png",
+   "faces/talk_15.png",
+   "faces/talk_16.png",
+   "faces/talk_17.png",
+   "faces/talk_18.png"
+  ],
+  "laugh": [
+   "faces/laugh_00.png",
+   "faces/laugh_01.png",
+   "faces/laugh_02.png",
+   "faces/laugh_03.png",
+   "faces/laugh_04.png",
+   "faces/laugh_05.png"
+  ]
+ },
+ "fps": {
+  "talk": 12,
+  "laugh": 8
+ },
+ "behaviors": {
+  "idle": 4,
+  "walk": 4,
+  "sleep": 1,
+  "chase": 1,
+  "rant": 2,
+  "yawn": 1
+ },
+ "chatter": [
+  "Làm việc đi!",
+  "Sao còn chưa lưu file?",
+  "Nhìn cái gì?",
+  "Uống nước chưa hả?",
+  "Ngồi lì thế, đứng dậy đi!",
+  "Hừm...",
+  "Nghỉ mắt tí đi, đỏ hết rồi kìa"
+ ],
+ "scream": "Trời ơi!",
+ "sway": 4,
+ "bob": 5,
+ "drop": "Cái gì đây? {name}",
+ "desktop_remark": "{name}... nằm chình ình ở đó làm gì?"
+}
