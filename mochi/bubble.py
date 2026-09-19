@@ -23,12 +23,12 @@ def show_ms(text):
     return int(min(6000, 1800 + 55 * len(text)))
 
 
-def place(px, py, w, h, g):
-    """Top-left of a bubble of size (w, h) for a pet window at (px, py) on screen bounds `g`: above its head, on the right
-    if it fits, else on the left, then kept fully on screen. Returns (x, y, on_right)."""
-    head = py + FEET - 110                                       # roughly the top of the ears
-    right = px + S / 2 + w <= g.right - 4
-    x = px + S / 2 - 24 if right else px + S / 2 + 24 - w        # the tail sits ~24 px off the pet's centre line
+def place(px, py, w, h, g, size=S, top=FEET - 106):
+    """Top-left of a bubble of size (w, h) for a pet window (side `size`, head top at window-y `top`) at (px, py) on screen
+    bounds `g`: above its head, on the right if it fits, else on the left, then kept fully on screen. Returns (x, y, on_right)."""
+    head = py + top - 4
+    right = px + size / 2 + w <= g.right - 4
+    x = px + size / 2 - 24 if right else px + size / 2 + 24 - w   # the tail sits ~24 px off the pet's centre line
     x = max(g.left + 4, min(g.right - w - 4, x))
     y = max(g.top + 4, head - h)
     return x, y, right
@@ -89,9 +89,9 @@ class SpeechBubble(QWidget):
         """drop everything (quiet mode, or the pet went to sleep)"""
         self.queue.clear(); self.timer.stop(); self.phase = "idle"; self.hide()
 
-    def follow(self, px, py, g):
+    def follow(self, px, py, g, size=S, top=FEET - 106):
         if not self.isVisible(): return
-        x, y, self.on_right = place(px, py, self.width(), self.height(), g)
+        x, y, self.on_right = place(px, py, self.width(), self.height(), g, size, top)
         if (int(x), int(y)) != (self.x(), self.y()): self.move(int(x), int(y))
         self.update()
 

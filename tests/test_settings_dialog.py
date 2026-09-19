@@ -65,3 +65,29 @@ def test_the_pet_opens_one_dialog_and_reuses_it(pet):
     assert pet.dialog is first and first.isVisible()
     pet.close()
     assert not first.isVisible()
+
+
+def test_the_character_and_size_controls_change_the_running_pet(qapp, tmp_path):
+    from conftest import write_pack
+
+    from mochi.pets import MOCHI
+    from mochi.pets.pack import load_dir
+    pets = {"mochi": MOCHI, "blob": load_dir(write_pack(tmp_path / "pack"))}
+    from PySide6.QtCore import QSettings
+
+    from mochi.pet import Pet
+    from mochi.settings import Settings
+    p = Pet(Settings(QSettings(str(tmp_path / "s.ini"), QSettings.IniFormat)), pets); p.timer.stop()
+    d = SettingsDialog(p)
+    assert d.who.count() == 2 and d.who.currentData() == "mochi"
+    d.who.setCurrentIndex(d.who.findData("blob"))
+    assert p.defn.id == "blob" and p.cfg.pet == "blob" and p.width() == 200
+    d.size.setValue(150)
+    assert p.scale == 1.5 and p.width() == 300 and p.cfg.scale == 1.5
+    d.close(); p.close()
+
+
+def test_with_only_mochi_installed_there_is_no_character_picker(pet):
+    d = SettingsDialog(pet)
+    assert pet.pets == {"mochi": pet.defn} and d.size.value() == 100
+    d.close()

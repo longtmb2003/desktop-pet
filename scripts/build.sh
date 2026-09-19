@@ -10,6 +10,7 @@ VENV=.venv-build
 "$VENV/bin/python" -m PyInstaller --noconfirm --clean --onedir --name mochi \
     --paths . \
     --add-data "mochi/platform/kwin.js:mochi/platform" \
+    $([ -d mochi/pets/packs ] && echo --add-data "mochi/pets/packs:mochi/pets/packs") \
     --exclude-module tkinter \
     packaging/entry.py
 echo "built: dist/mochi/mochi ($(du -sh dist/mochi | cut -f1))"

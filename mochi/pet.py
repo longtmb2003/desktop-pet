@@ -5,32 +5,32 @@ import time
 from datetime import datetime
 
 from PySide6.QtCore import QElapsedTimer, QPoint, Qt, QTimer
-from PySide6.QtGui import QCursor, QGuiApplication, QPainter
+from PySide6.QtGui import QCursor, QGuiApplication, QPainter, QTransform
 from PySide6.QtWidgets import QApplication, QMenu, QWidget
 
 from . import autostart, monitor, physics
 from .bubble import SpeechBubble
 from .pomodoro import Pomodoro
-from .physics import FEET, IMPACT_DIZZY, S, THROW_MIN, WALK_SPEED, Bounds, DragTracker
+from .pets import MOCHI, available
+from .physics import IMPACT_DIZZY, THROW_MIN, Bounds, DragTracker
 from .renderer import THEMES, paint, silhouette
 from .settings import Settings
 from .settings_dialog import SettingsDialog
+from .sprite import paint_sprite, sprite_mask, sprite_mask_key
 from .sound import chime
 from .state import Action, Expression, Motion, State, after, ends_at
 
 PUSH_CHANCE = 0.5                  # of the edge encounters that aren't a hop off, how many are a push against the "wall"
 CLICK_DELAY_MS = 250                # a click waits this long for a second click before it counts as a pet
-CHATTER = ("Meo~", "Bạn uống nước chưa?", "Nghỉ mắt một chút nhé!", "Mochi ở đây nè", "Nhớ lưu file nha", "Vươn vai một cái đi!")
 LOW_FPS_MS = 50                     # frame interval (ms) when asleep, or resting in Quiet Mode / on a busy CPU
 MAX_DT = 0.05                       # cap one frame's time step so a stall can't launch the pet through a window
 
 
 class Pet(QWidget):
-    def __init__(self, settings=None):
+    def __init__(self, settings=None, pets=None):
         super().__init__()
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setFixedSize(S, S)
         self.t = self.vy = self.squash = self.blink = 0.0
         self.facing, self.hearts = 1, []            # hearts: [x, y, life]
         self.wins, self.support, self.vx, self.grounded = {}, None, 0.0, False   # wins: id -> (x, y, w, h); support: id we stand on
@@ -38,8 +38,11 @@ class Pet(QWidget):
         self.paused, self.drag, self.shaken = False, DragTracker(), False
         self.cfg = settings or Settings()
         self.theme = self.cfg.theme
+        self.pets = pets if pets is not None else available()          # id -> PetDef
+        self.defn, self.scale = self.pets.get(self.cfg.pet, MOCHI), self.cfg.scale
+        self.fit_size()
         g = self.screen_geo()
-        self.px, self.py = random.uniform(g.left + 80, g.right - 240), g.top - 100
+        self.px, self.py = random.uniform(g.left + 80, g.right - 240 * self.scale), g.top - 100
         self.enter(State(Motion.AIRBORNE))
         self.clock = QElapsedTimer(); self.clock.start()   # real frame time, see tick()
         self.pomo, self.hot, self.cpu, self.read_cpu = Pomodoro(), False, monitor.Hysteresis(), monitor.cpu_percent
@@ -63,9 +66,28 @@ class Pet(QWidget):
         self.began, self.dur = self.t, max(min(self.until - self.t, 1e9), 1e-3)   # for one-shot animations
         if state.motion is Motion.WALK and state.action is Action.NONE:
             self.facing = random.choice((-1, 1))
+        if state.action is Action.RANT and hasattr(self, "bubble"): self.say(random.choice(self.defn.chatter), chatter=True)
+
+    def fit_size(self):
+        """derive the window size and floor/head geometry from the current pet definition and scale"""
+        d, k = self.defn, self.scale
+        self.size, self.feet, self.top = round(d.size * k), round(d.feet * k), round(d.top * k)
+        self.head, self.ceiling, self.walk_speed = (d.height + 84) * k, self.top, d.walk_speed * k
+        self.setFixedSize(self.size, self.size)
+        self.mask_key = None
+
+    def change_pet(self, defn, scale):
+        """switch character and/or size on the fly, keeping the feet where they are"""
+        cx, fy = self.px + self.size / 2, self.py + self.feet
+        self.defn, self.scale = defn, scale
+        self.fit_size()
+        self.px, self.py = cx - self.size / 2, fy - self.feet
+        self.move(int(self.px), int(self.py))
+        self.bubble.dismiss()
+        self.next_chat = min(self.next_chat, self.t + random.uniform(30, 90))
 
     def screen_geo(self):
-        c = QPoint(int(getattr(self, "px", 0)) + S // 2, int(getattr(self, "py", 0)) + FEET)
+        c = QPoint(int(getattr(self, "px", 0)) + self.size // 2, int(getattr(self, "py", 0)) + self.feet)
         r = (QGuiApplication.screenAt(c) or QGuiApplication.primaryScreen()).availableGeometry()
         return Bounds(r.left(), r.top(), r.right(), r.bottom())
 
@@ -79,8 +101,8 @@ class Pet(QWidget):
         self.hearts = [[x, y - 40 * dt, l - dt] for x, y, l in self.hearts if l > dt]
         if self.state.motion is not Motion.DRAG:
             g = self.screen_geo()
-            cx = self.px + S / 2
-            floor, wid = physics.surface(self.wins, self.support, cx, self.py + FEET, g)
+            cx = self.px + self.size / 2
+            floor, wid = physics.surface(self.wins, self.support, cx, self.py + self.feet, g, self.feet, self.head)
             riding = wid is not None and wid == self.support and self.vy >= 0   # already standing on this window
             if riding:
                 self.py = floor                                    # ride it while it moves
@@ -89,8 +111,8 @@ class Pet(QWidget):
                 if self.support is not None and self.support not in self.wins and self.state.motion is not Motion.AIRBORNE:
                     self.support, self.vx, self.vy = None, 0.0, 0.0                 # the ground vanished under its feet
                     self.enter(State(Motion.AIRBORNE, Expression.SCARED))
-                    self.say("Á!", urgent=True)
-                f = physics.step_air(self.px, self.py, self.vx, self.vy, dt, floor, g)
+                    self.say(self.defn.scream, urgent=True)
+                f = physics.step_air(self.px, self.py, self.vx, self.vy, dt, floor, g, self.size, self.ceiling)
                 self.px, self.py, self.vx, self.vy = f.x, f.y, f.vx, f.vy
                 if f.hit: self.squash = 0.3
                 calm_or_scared = self.state.expression in (Expression.NORMAL, Expression.SCARED)
@@ -111,16 +133,16 @@ class Pet(QWidget):
                         self.walk(dt, g, cx, wid)                           # (a PUSH stands still)
             if self.t > self.until:
                 edge = self.facing if self.state.action is Action.PUSH else 0
-                nxt = after(self.state, hour=self.hour(), chase=self.cfg.chase)
+                nxt = after(self.state, hour=self.hour(), chase=self.cfg.chase, weights=self.defn.behaviors)
                 self.enter(State(action=Action.WORK) if self.pomo.focusing and self.grounded else nxt)   # focus: back to the laptop
                 if edge: self.facing = -edge                                # after shoving the edge, never walk straight back into it
             self.move(int(self.px), int(self.py))
         if self.pomo.active: self.pomodoro_event(self.pomo.poll())
         if self.t > self.next_chat:
             self.next_chat = self.t + random.uniform(120, 300)
-            if self.state.motion in (Motion.IDLE, Motion.WALK): self.say(random.choice(CHATTER), chatter=True)
+            if self.state.motion in (Motion.IDLE, Motion.WALK): self.say(random.choice(self.defn.chatter), chatter=True)
         self.retune()
-        if self.bubble.isVisible(): self.bubble.follow(self.px, self.py, self.screen_geo())
+        if self.bubble.isVisible(): self.bubble.follow(self.px, self.py, self.screen_geo(), self.size, self.top)
         self.update_mask()
         self.update()
 
@@ -132,6 +154,8 @@ class Pet(QWidget):
     def apply_settings(self):
         """a setting changed: bring the running pet in line (CPU watching, frame rate)"""
         self.sync_monitor()
+        pd = self.pets.get(self.cfg.pet, self.defn)
+        if pd is not self.defn or self.cfg.scale != self.scale: self.change_pet(pd, self.cfg.scale)
         self.retune()
 
     def open_settings(self):
@@ -212,44 +236,49 @@ class Pet(QWidget):
             self.enter(State(expression=Expression.HAPPY))         # caught it!
             return
         self.facing = 1 if dx > 0 else -1
-        self.px += self.facing * 2 * WALK_SPEED * self.cfg.speed * dt
+        self.px += self.facing * 2 * self.walk_speed * self.cfg.speed * dt
 
     def walk(self, dt, g, cx, wid):
         dizzy = self.state.expression is Expression.DIZZY
-        step = self.facing * WALK_SPEED * self.cfg.speed * (0.6 if self.hot else 1) * dt      # too hot to hurry
+        step = self.facing * self.walk_speed * self.cfg.speed * (0.6 if self.hot else 1) * dt      # too hot to hurry
         if dizzy:                                                                # half speed, swaying, changing its mind
             step = step / 2 + math.sin(self.t * 7) * 40 * dt
             if random.random() < 0.02: self.facing = -self.facing
         self.px += step; cx += step
         lo, hi = physics.span(self.wins, g, wid)
         if wid is None and not dizzy and random.random() < 0.004:                              # floor: sometimes hop onto a window
-            self.hop_to(cx, self.py + FEET, g)
+            self.hop_to(cx, self.py + self.feet, g)
         if cx < lo or cx > hi:
             out = -1 if cx < lo else 1
             if wid is not None and not dizzy and random.random() < 0.4:      # hop off the window edge
                 self.facing, self.vx, self.vy, self.support = out, out * 140, -260, None
             elif not dizzy and random.random() < PUSH_CHANCE:
-                self.px = (lo if out < 0 else hi) - S / 2                   # stop at the edge and shove against it
+                self.px = (lo if out < 0 else hi) - self.size / 2                   # stop at the edge and shove against it
                 self.facing = out
                 self.enter(State(Motion.WALK, action=Action.PUSH))
             else:
                 self.facing = -out
 
     def hop_to(self, cx, feet, g):
-        hop = physics.hop_target(self.wins, cx, feet, g)
+        hop = physics.hop_target(self.wins, cx, feet, g, self.head)
         if hop:
             self.vx, self.vy, face = hop
             if face: self.facing = face
 
     def update_mask(self):
         # clip the window to the pet's silhouette so clicks pass through the transparent rest
+        if self.defn.kind == "sprite":
+            key = (self.defn.id, self.scale, *sprite_mask_key(self))
+            if key != self.mask_key: self.mask_key = key; self.setMask(sprite_mask(self))
+            return
         f, sleep = -self.facing, self.state.motion is Motion.SLEEP
         stretch = self.state.action in (Action.STRETCH, Action.PUSH)             # both lean forward
         flip = self.state.action is Action.FLIP
-        key = (f, sleep, stretch, flip, tuple((int(x), int(y)) for x, y, _ in self.hearts))
+        key = (self.scale, f, sleep, stretch, flip, tuple((int(x), int(y)) for x, y, _ in self.hearts))
         if key == self.mask_key: return
         self.mask_key = key
-        self.setMask(silhouette(f, sleep, stretch, self.hearts, flip))
+        region = silhouette(f, sleep, stretch, self.hearts, flip)
+        self.setMask(region if self.scale == 1 else QTransform().scale(self.scale, self.scale).map(region))
 
     # ---- input -----------------------------------------------------------
     def mousePressEvent(self, e):
@@ -299,6 +328,9 @@ class Pet(QWidget):
         self.hearts = []
 
     def contextMenuEvent(self, e):
+        self.build_menu().exec(e.globalPos())
+
+    def build_menu(self):
         m = QMenu(self)
         colors = m.addMenu("Màu")
         for name in THEMES:
@@ -314,18 +346,23 @@ class Pet(QWidget):
         a = m.addAction("Chế độ yên lặng"); a.setCheckable(True); a.setChecked(self.cfg.quiet)
         a.toggled.connect(lambda on: (setattr(self.cfg, "quiet", on), self.apply_settings()))
         m.addAction("Cài đặt...", self.open_settings)
+        if len(self.pets) > 1:
+            who = m.addMenu("Nhân vật")
+            for pid, d in self.pets.items():
+                a = who.addAction(d.name); a.setCheckable(True); a.setChecked(pid == self.defn.id)
+                a.triggered.connect(lambda _, i=pid: (setattr(self.cfg, "pet", i), self.apply_settings()))
         m.addAction("Ngủ", lambda: self.enter(State(Motion.SLEEP)))
         m.addAction("Gọi về", self.bring_back)
         a = m.addAction("Tạm dừng"); a.setCheckable(True); a.setChecked(self.paused); a.toggled.connect(self.set_paused)
         a = m.addAction("Tự chạy khi đăng nhập"); a.setCheckable(True); a.setChecked(autostart.is_enabled())
         a.toggled.connect(lambda on: autostart.enable() if on else autostart.disable())
         m.addAction("Thoát", QApplication.quit)
-        m.exec(e.globalPos())
+        return m
 
     def bring_back(self):
         """drop the pet in from the top of the primary screen (e.g. it got lost off-screen)"""
         g = QGuiApplication.primaryScreen().availableGeometry()
-        self.px, self.py, self.vy, self.vx, self.support = g.center().x() - S / 2, g.top() - 100, 0.0, 0.0, None
+        self.px, self.py, self.vy, self.vx, self.support = g.center().x() - self.size / 2, g.top() - 100 * self.scale, 0.0, 0.0, None
         self.enter(State(Motion.AIRBORNE))
 
     def set_paused(self, on):
@@ -339,7 +376,7 @@ class Pet(QWidget):
 
     def ensure_visible(self):
         """called when a screen goes away: if the pet was on it, bring it back"""
-        c = QPoint(int(self.px) + S // 2, int(self.py) + FEET)
+        c = QPoint(int(self.px) + self.size // 2, int(self.py) + self.feet)
         if self.state.motion is not Motion.DRAG and QGuiApplication.screenAt(c) is None:
             self.bring_back()
 
@@ -350,4 +387,5 @@ class Pet(QWidget):
     def paintEvent(self, _):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
-        paint(self, p)
+        if self.scale != 1: p.scale(self.scale, self.scale)
+        (paint_sprite if self.defn.kind == "sprite" else paint)(self, p)

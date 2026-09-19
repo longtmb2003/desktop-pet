@@ -1,7 +1,7 @@
 """Drawing: themes, the pet's vector body and its click-through silhouette. Pure functions of the pet's state."""
 import math
 
-from PySide6.QtCore import QPoint, QPointF, QRectF, Qt
+from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QBrush, QColor, QCursor, QLinearGradient, QPainter, QPainterPath, QPen, QRegion
 
 from .physics import FEET, S
@@ -114,8 +114,9 @@ def paint(pet, p):
 
     # face
     for m in (-1, 1): blob(QColor(255, 157, 176, 120), m * 31, -37, 8, 4.5)
-    cur = QCursor.pos() - pet.pos() - QPoint(S // 2, FEET - 46)                 # eyes follow the cursor
-    lx, ly = max(-1, min(1, cur.x() / 250)) * -2.5 * pet.facing, max(-1, min(1, cur.y() / 250)) * 1.5
+    cur = QCursor.pos() - pet.pos()                                              # eyes follow the cursor (window pixels -> drawing pixels)
+    cx, cy = cur.x() / pet.scale - S // 2, cur.y() / pet.scale - (FEET - 46)
+    lx, ly = max(-1, min(1, cx / 250)) * -2.5 * pet.facing, max(-1, min(1, cy / 250)) * 1.5
     if act is Action.WORK: lx, ly = 0, 3                                       # eyes on the screen, not on the cursor
     pen = QPen(DARK, 3, Qt.SolidLine, Qt.RoundCap)
     for x in (-19, 19):
