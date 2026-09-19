@@ -1,7 +1,8 @@
 """Build the Hà Nhân sprite pack into mochi/pets/packs/hanhan/ from the two source images in packaging/:
   "hà nhân.jpg"              the whole figure on white   -> body.png (white background cut out, own face blanked) + faces/neutral.png
   "biểu cảm mặt hà nhân.png" a 5x5 sheet of head frames  -> faces/talk_*.png (frames 3911-3929) and faces/laugh_*.png (3930-3935)
-  "Hà Nhân chạy xe"          him on a tricycle (and a close-up head)  -> ride.png (background cut, stray "+" mark removed)
+  "Hà Nhân chạy xe"          him on a tricycle (and a close-up head)  -> ride.png (background cut, stray "+" mark removed), and the
+                             close-up's toothy grin -> faces/grin.png (rotated upright and scaled onto the body's head)
   the body again with the arm(s) that are tucked behind his back cut away -> free_left.png, free_right.png, free_both.png, used
   while he draws his own arm (pointing, holding a sign) so that there aren't two arms
 Faces become transparent ink overlays (dark strokes; the alpha is the darkness) registered to the body's own face, so any expression
@@ -23,6 +24,8 @@ OUT = ROOT / "mochi" / "pets" / "packs" / "hanhan"
 # beyond the straight line that the coat edge would follow without it is erased, and that line is drawn as the new coat edge.
 ARM_CUT = {"left": ((152, 352), (126, 557), (60, 340), (60, 575)), "right": ((332, 345), (350, 562), (460, 335), (460, 580))}
 EDGE_INK = QColor(28, 34, 48)
+GRIN_RECT = (520, 135, 705, 262)                    # the grin face inside the close-up head (source pixels), clear of its outline and ears
+GRIN_SCALE, GRIN_ROLL, GRIN_SHIFT = 1.44, -11.0, (0, -8)   # close-up -> body head size; the close-up head is rolled about 11 degrees; nudge
 RIDER_X = 470                                       # the tricycle rider is left of this in the sheet, a close-up head is right of it
 STRAY_MARK = (225, 227, 8)                          # a small "+" drawn on the rider's face in the source: (x, y, radius) to whiten
 # wheels of the tricycle in the source image: centre and radii of the tyre, the orange rim, the hub the spokes turn about, and shapes
@@ -121,6 +124,7 @@ def main():
     faces = {"neutral": [ink(body_src, (box[0], box[1], box[0] + box[2], box[1] + box[3]), size)]}
     faces["talk"] = [ink(tile(sheet, n), tbox, size) for n in range(3911, 3930)]
     faces["laugh"] = [ink(tile(sheet, n), tbox, size) for n in range(3930, 3936)]
+    faces["grin"] = [grin_face(body_ink, size, box)]
 
     keep = outline(body_src, (box[0], box[1], box[0] + box[2], box[1] + box[3]), 200)
     for y in range(box[1], box[1] + box[3]):                                         # blank the body's own face (not the outline)
@@ -185,6 +189,23 @@ def free_arms(body, sides):
     return out
 
 
+def grin_face(neutral_ink, size, box):
+    """the close-up's toothy grin as an ink overlay for the body's face box (`size`), in the body's own head proportions"""
+    src = QImage(str(SRC_RIDE)).convertToFormat(QImage.Format_ARGB32)
+    for x, y in outline(src, GRIN_RECT, 150): src.setPixel(x, y, 0xFFFFFFFF)                 # the head outline and ear are not the face
+    x0, y0, x1, y1 = GRIN_RECT
+    piece = ink(src, GRIN_RECT, (x1 - x0, y1 - y0))
+    ax0, ay0, ax1, ay1 = ink_box(src, GRIN_RECT)
+    anchor = ((ax0 + ax1) / 2, (ay0 + ay1) / 2)                                                # the middle of the grin's ink
+    bx0, by0, bx1, by1 = neutral_ink
+    dst = ((bx0 + bx1) / 2 - box[0] + GRIN_SHIFT[0], (by0 + by1) / 2 - box[1] + GRIN_SHIFT[1])
+    out = QImage(size[0], size[1], QImage.Format_ARGB32); out.fill(0)
+    p = QPainter(out); p.setRenderHint(QPainter.SmoothPixmapTransform)
+    p.translate(*dst); p.rotate(-GRIN_ROLL); p.scale(GRIN_SCALE, GRIN_SCALE); p.translate(-anchor[0], -anchor[1])
+    p.drawImage(x0, y0, piece); p.end()
+    return out
+
+
 def ride_sprite():
     """the tricycle rider from the sheet: background cut away, the stray mark whitened; returns (image, crop origin)"""
     src = QImage(str(SRC_RIDE)).convertToFormat(QImage.Format_ARGB32)
@@ -206,7 +227,7 @@ def tile(sheet, n):
 
 def preview(body, box, faces, path):
     """the head with a few expressions laid over it"""
-    show = [("neutral", 0), ("talk", 0), ("talk", 9), ("talk", 18), ("laugh", 0), ("laugh", 4)]
+    show = [("neutral", 0), ("talk", 0), ("grin", 0), ("talk", 18), ("laugh", 0), ("laugh", 4)]
     hx, hy, hw, hh = box[0] - 50, box[1] - 170, 340, 360                              # head area of the body image
     cell = QImage(hw, hh, QImage.Format_ARGB32)
     out = QImage(hw * 3, hh * 2, QImage.Format_ARGB32); out.fill(QColor("#e8e0ff"))

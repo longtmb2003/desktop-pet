@@ -196,3 +196,93 @@ def test_arm_poses_still_fit_the_mask_and_the_window_with_the_arm_free_bodies(ma
                 left, edge = uncovered_and_clipped(p)
                 assert left < 40 and edge < 40, (st, f, k, left, edge)
     assert QPoint is not None
+
+
+# ---- the toothy grin ---------------------------------------------------------------------------------------------------
+def test_it_wears_the_toothy_grin_while_up_to_mischief_and_not_otherwise(make, tmp_path):
+    from mochi.sprite import face_kind
+    from mochi.state import MISCHIEF
+    p = make_pet(make, tmp_path)
+    for a in MISCHIEF:
+        p.state = State(action=a); assert face_kind(p) == "grin", a
+    p.state = State(expression=Expression.HAPPY); assert face_kind(p) == "laugh"       # being petted is still a laugh
+    p.state = State(); assert face_kind(p) == "neutral"
+
+
+def test_a_pack_without_a_grin_falls_back_to_its_neutral_face(qapp, tmp_path):
+    d = load_dir(write_pack(tmp_path / "a", id="a"))
+    assert d.pack.face("grin", 1.0) is d.pack.faces["neutral"][0]
+
+
+def test_a_pack_can_have_a_grin_and_the_real_pack_does(qapp, tmp_path):
+    from conftest import HANHAN
+    d = load_dir(write_pack(tmp_path / "g", id="g", faces={"neutral": ["faces/n.png"], "grin": ["faces/l.png"]}))
+    assert d.pack.face("grin", 1.0) is d.pack.faces["grin"][0] and d.pack.face("grin", 1.0) is not d.pack.faces["neutral"][0]
+    if (HANHAN / "pack.json").exists():
+        real = load_dir(HANHAN).pack
+        assert "grin" in real.faces and real.face("grin", 0) is not real.faces["neutral"][0]
+
+
+# ---- holding the busy sign -----------------------------------------------------------------------------------------------
+def sign_pet(make, tmp_path):
+    d = load_dir(write_pack(tmp_path / "sg", id="sg", work_prop="sign", free=True, height=150))
+    p = make("sg", 1.0, {"mochi": MOCHI, "sg": d})
+    p.grounded, p.hot, p.squash, p.hearts, p.state, p.t, p.began, p.dur = True, False, 0.0, [], State(action=Action.WORK), 10.472, 10.0, 8.0
+    return p, d.pack
+
+
+def is_skin(c):
+    return c.alpha() > 200 and c.red() > 220 and 180 < c.green() < 220
+
+
+def is_brown(c):
+    return c.alpha() > 200 and c.red() > 130 and c.green() < 120 and c.blue() < 80
+
+
+def count(img, rect, pred):
+    x0, y0, x1, y1 = rect
+    return sum(1 for y in range(y0, y1) for x in range(x0, x1) if pred(img.pixelColor(x, y)))
+
+
+@pytest.mark.parametrize("facing", [1, -1])
+def test_the_sign_is_held_by_a_handle_in_two_fists_and_the_arms_never_cover_its_face(make, tmp_path, facing):
+    p, pk = sign_pet(make, tmp_path)
+    p.facing = p.drawn_facing = facing
+    img = render(p)
+    bw, bh = pk.body.width() * 150 / pk.body.height(), 150
+    cx, cy, r = p.size // 2, p.feet - int(bh * 0.44), int(bw * 0.31)
+    coat = pk.coat
+    sleeve_on_sign = count(img, (cx - r // 2, cy - r // 2, cx + r // 2, cy + r // 2), lambda c: c.rgb() == coat.rgb())
+    assert sleeve_on_sign == 0                                           # no sleeve over the sign
+    fists_y = cy + r + 14
+    skin = count(img, (cx - 20, fists_y - 12, cx + 20, fists_y + 12), is_skin)
+    assert skin > 80                                                     # two fists, side by side, on the handle under the sign
+    brown = count(img, (cx - 6, cy + r + 24, cx + 6, cy + r + 34), is_brown)
+    assert brown > 5                                                     # and the handle runs down below them
+    fists = count(img, (cx - 20, cy + r + 2, cx + 20, cy + r + 26), is_skin)
+    assert fists > 100                                                   # whole fists show: they are in front of the handle, not behind it
+
+
+def test_the_fists_stay_put_while_the_sign_sways(make, tmp_path):
+    p, pk = sign_pet(make, tmp_path)
+    p.facing = p.drawn_facing = 1
+    fist_rows = []
+    for t in (10.472, 11.0, 11.5):                                       # the sign is at different angles at these times
+        p.t = t
+        img = render(p)
+        cx, fy = p.size // 2, p.feet - int(150 * 0.44) + int(pk.body.width() * 150 / pk.body.height() * 0.31) + 14
+        fist_rows.append(count(img, (cx - 16, fy - 8, cx + 16, fy + 8), is_skin))
+    assert max(fist_rows) - min(fist_rows) < 25                          # the hands do not swing with it
+
+
+def test_the_sign_sways_from_side_to_side(make, tmp_path):
+    p, pk = sign_pet(make, tmp_path)
+    p.facing = p.drawn_facing = 1
+
+    def red_x(t):
+        p.t = t
+        img = render(p)
+        xs = [x for y in range(img.height()) for x in range(img.width())
+              if (c := img.pixelColor(x, y)).alpha() > 200 and c.red() > 170 and c.green() < 70 and c.blue() < 80]
+        return sum(xs) / len(xs)
+    assert abs(red_x(0.5236) - red_x(1.5708)) > 1.5                      # 3t = pi/2 and 3pi/2: the two ends of the swing

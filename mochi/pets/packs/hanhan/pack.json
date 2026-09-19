@@ -119,6 +119,9 @@
    "faces/laugh_03.png",
    "faces/laugh_04.png",
    "faces/laugh_05.png"
+  ],
+  "grin": [
+   "faces/grin_00.png"
   ]
  },
  "fps": {

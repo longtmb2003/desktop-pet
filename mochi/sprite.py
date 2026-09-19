@@ -5,11 +5,11 @@ All drawing is in the definition's own pixel space (`defn.size` square, origin a
 import math
 
 from PySide6.QtCore import QPointF, QRect, QRectF, Qt
-from PySide6.QtGui import QColor, QCursor, QPainter, QPainterPath, QPen, QPolygonF, QRegion, QTransform
+from PySide6.QtGui import QColor, QCursor, QPainter, QPainterPath, QPen, QPolygonF, QRegion
 
-from .limbs import draw_arm
+from .limbs import draw_arm, draw_hand
 from .renderer import heart, star
-from .state import SCOLDING, Action, Expression, Motion
+from .state import MISCHIEF, SCOLDING, Action, Expression, Motion
 
 INK = QColor(24, 22, 26)
 
@@ -19,7 +19,7 @@ def face_kind(pet):
     s = pet.state
     if s.expression is Expression.HAPPY: return "laugh"
     if s.expression is Expression.SCARED or s.action in (Action.RANT, Action.YAWN, *SCOLDING): return "talk"
-    if s.action in (Action.STOMP, Action.DANCE): return "laugh"
+    if s.action in MISCHIEF: return "grin"                                          # naughty: the toothy grin
     if pet.bubble.isVisible() and s.motion is not Motion.SLEEP: return "talk"       # moves its mouth while its words are up
     return "neutral"
 
@@ -44,30 +44,31 @@ RED = QColor(206, 32, 41)
 
 
 def draw_prop(p, pk, bw, bh, t, mirror):
-    """what it holds while working: a red "no entry, busy" sign, or a laptop; held in two hands on arms with elbows, sleeves from the
-    shoulders, so it is clearly gripped rather than floating in front of the body"""
-    sx, sy0, aw = bw * 0.28, -bh * 0.53, bw * 0.26                                     # shoulders (on the chest), the sleeve width there
-    l1, l2, hsz = bw * 0.32, bw * 0.30, bw * 0.0085                                     # segment lengths, and the hand's size (~19 px)
+    """what it holds while working: a red "no entry, busy" sign on a handle, or a laptop. Both hands take hold of it and the arms
+    come straight from the shoulders, so it is clearly gripped rather than floating in front of the body"""
+    sx, sy0, aw = bw * 0.27, -bh * 0.53, bw * 0.17                                     # shoulders (on the chest), the sleeve width there
+    l1, l2, hsz = bw * 0.32, bw * 0.30, bw * 0.0085
     if pk.work_prop == "sign":
-        cy, r = -bh * 0.44, bw * 0.30                                                 # the disc's centre and radius
-        grip = QPointF(0, cy + 6)                                                     # the sign is held by its sides
+        cy, r = -bh * 0.44, bw * 0.31                                                 # the disc's centre and radius
+        grip = QPointF(0, cy + r + 14)                                                # both fists close round the handle, under the sign
+        held = [draw_arm(p, pk.coat, QPointF(side * sx, sy0), QPointF(side * 7, grip.y()), aw, "grip", l1, l2, hsz) for side in (-1, 1)]
         p.save(); p.translate(grip); p.rotate(math.sin(t * 3) * 4); p.translate(-grip)   # the sign sways a little: "not now!"
+        p.setPen(QPen(QColor(90, 60, 32), 1.2)); p.setBrush(QColor(150, 104, 58))
+        p.drawRoundedRect(QRectF(-3, cy + r - 6, 6, 44), 2, 2)                        # the handle
         p.setPen(QPen(QColor(120, 20, 25), 1.5)); p.setBrush(Qt.white); p.drawEllipse(QPointF(0, cy), r, r)
         p.setPen(QPen(RED, r * 0.24)); p.setBrush(Qt.NoBrush); p.drawEllipse(QPointF(0, cy), r * 0.86, r * 0.86)
         d = r * 0.86 * 0.7071
         p.setPen(QPen(RED, r * 0.24, Qt.SolidLine, Qt.FlatCap)); p.drawLine(QPointF(-d, -d + cy), QPointF(d, d + cy))       # the slash
         p.setPen(QPen(QColor(120, 20, 25), 1)); p.setBrush(RED)
-        plaque = QRectF(-bw * 0.24, cy + r + 3, bw * 0.48, 15)
+        plaque = QRectF(-bw * 0.24, cy + r - 8, bw * 0.48, 15)                        # "BẬN" across the sign's lower edge
         p.drawRoundedRect(plaque, 3, 3)
         p.save(); p.translate(plaque.center()); p.scale(mirror, 1)                     # text must not come out mirrored
         f = p.font(); f.setBold(True); f.setPixelSize(11); p.setFont(f); p.setPen(Qt.white)
         p.drawText(QRectF(-plaque.width() / 2, -plaque.height() / 2, plaque.width(), plaque.height()), Qt.AlignCenter, "BẬN")
         p.restore()
         p.restore()
-        for side in (-1, 1):                                                          # both hands take hold of the rim (they sway with it)
-            rim = QPointF(side * bw * 0.26, cy + r + 10)                                # hands on the plaque's ends, arms hanging
-            hold = grip + QTransform().rotate(math.sin(t * 3) * 4).map(rim - grip)
-            draw_arm(p, pk.coat, QPointF(side * sx, sy0), hold, aw, "grip", l1, l2, hsz)
+        for wrist, elbow in held:                                                     # the arms pass behind the sign: only the fists show
+            draw_hand(p, wrist, math.atan2(wrist.y() - elbow.y(), wrist.x() - elbow.x()), "grip", hsz)
     else:
         top = -bh * 0.36
         p.setPen(QPen(QColor(90, 96, 110), 2)); p.setBrush(QColor(176, 184, 198))

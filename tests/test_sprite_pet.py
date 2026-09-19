@@ -302,7 +302,9 @@ def test_the_busy_sign_is_red_and_its_text_reads_the_same_whichever_way_it_faces
     p.facing = 1; right = render(p)
     p.facing = -1; left = render(p)
     import mochi.sprite as sp
-    monkeypatch.setattr(sp, "draw_arm", lambda *a, **k: None)                # (arms aren't mirror images: leave them out)
+    from PySide6.QtCore import QPointF
+    monkeypatch.setattr(sp, "draw_arm", lambda *a, **k: (QPointF(0, 0), QPointF(0, -1)))     # (arms aren't mirror images: leave them out)
+    monkeypatch.setattr(sp, "draw_hand", lambda *a, **k: None)
     p.facing = 1; right_text = render(p)
     p.facing = -1; left_text = render(p)
     assert reds(right) > 300 and reds(left) > 300                          # a big red no-entry sign
