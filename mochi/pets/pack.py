@@ -10,6 +10,7 @@ pack.json (all lengths in window pixels at scale 1, image coordinates in pixels 
                    "neutral" is required; a missing kind falls back to "neutral". Ink-style faces: dark strokes on transparency
   fps              {"talk": 10, ...} frames per second of an animated kind (default 8)
   behaviors        {"idle": 4, "walk": 3, "sleep": 1, "chase": 1, "rant": 2, ...} weights; names as in state.BEHAVIOR_NAMES
+                   ("sleep" is accepted but never picked at random: sleeping follows the schedule, see sleep.py)
   chatter, scream  what it says now and then / when the ground vanishes
   drop, desktop_remark   what it says when a file is dropped on it / about an item on the desktop; "{name}" stands for the item
   sway, bob        walking waddle: degrees of tilt and pixels of bounce

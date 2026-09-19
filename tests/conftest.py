@@ -54,3 +54,18 @@ def write_pack(root, wide=False, **over):
 def no_real_desktop(tmp_path, monkeypatch):
     """tests never look at (or open things from) the real desktop folder"""
     monkeypatch.setenv("MOCHI_DESKTOP", str(tmp_path / "desktop"))
+
+
+class Afternoon:
+    """stands in for datetime in mochi.pet: it is always Monday 15:00, so no test depends on when it happens to run (the pet
+    sleeps at midday and at night, and is calmer in the evening)"""
+    @staticmethod
+    def now(tz=None):
+        from datetime import datetime
+        return datetime(2026, 9, 21, 15, 0, 0)
+
+
+@pytest.fixture(autouse=True)
+def fixed_time_of_day(monkeypatch):
+    import mochi.pet
+    monkeypatch.setattr(mochi.pet, "datetime", Afternoon)

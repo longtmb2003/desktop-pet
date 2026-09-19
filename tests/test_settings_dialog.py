@@ -91,3 +91,21 @@ def test_with_only_mochi_installed_there_is_no_character_picker(pet):
     d = SettingsDialog(pet)
     assert pet.pets == {"mochi": pet.defn} and d.size.value() == 100
     d.close()
+
+
+def test_the_sleep_schedule_is_edited_in_the_dialog(pet):
+    from PySide6.QtCore import QTime
+    d = SettingsDialog(pet)
+    try:
+        assert (d.times["nap_from"].time(), d.times["nap_to"].time()) == (QTime(12, 0), QTime(13, 30))
+        assert (d.times["night_from"].time(), d.times["night_to"].time()) == (QTime(22, 0), QTime(6, 0))
+        assert d.boxes["nap_on"].isChecked() and d.boxes["night_on"].isChecked() and d.boxes["sleep_system"].isChecked()
+        d.times["nap_from"].setTime(QTime(12, 30)); d.times["night_to"].setTime(QTime(7, 15))
+        d.boxes["night_on"].setChecked(False); d.boxes["sleep_system"].setChecked(False)
+        assert (pet.cfg.nap_from, pet.cfg.night_to, pet.cfg.night_on, pet.cfg.sleep_system) == ("12:30", "07:15", False, False)
+        pet.cfg.nap_to = "14:00"; d.reload()                                                 # changed elsewhere: the window follows
+        assert d.times["nap_to"].time() == QTime(14, 0) and not d.boxes["night_on"].isChecked()
+        pet.cfg.night_from = "garbage"; d.reload()
+        assert d.times["night_from"].time() == QTime(22, 0)                                  # unusable value: the default is shown
+    finally:
+        d.close()

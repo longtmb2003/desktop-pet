@@ -23,7 +23,7 @@
 - 5 màu (Kem, Cam, Xám, Bạc hà, Hồng), được nhớ cho lần chạy sau
 - Bong bóng thoại: "Á!" khi hoảng sợ, thỉnh thoảng nói vu vơ, báo Pomodoro và thông báo từ chương trình khác. Có hàng đợi (tối đa 5), tự tắt sau vài giây, click xuyên qua, tự chọn bên trái/phải để không tràn màn hình
 - Pomodoro: chuột phải → Pomodoro → Bắt đầu. Khi tập trung, Mochi ngồi gõ laptop nhỏ; hết giờ thì có bong bóng, tiếng chuông và chuyển sang giờ nghỉ (tự đặt độ dài trong Cài đặt)
-- Theo giờ trong ngày (giờ địa phương): từ 00:00 đến 06:00 dễ ngủ hơn, từ 22:00 bớt chạy đuổi. Không ép ngủ khi bạn vừa chơi với nó
+- Chỉ ngủ khi có lý do, không bao giờ ngủ ngẫu nhiên: lúc bạn khoá màn hình hoặc cho máy ngủ (thức dậy khi mở khoá, có lời chào), ngủ trưa từ 12:00 đến 13:30 và ngủ tối từ 22:00 đến 06:00 (giờ địa phương, chỉnh được trong Cài đặt). Vuốt ve thì nó dậy chơi rồi lại ngủ sau nửa phút; đang Pomodoro thì nó vẫn ngồi gõ laptop. Từ 22:00 nó còn bớt chạy đuổi
 - Máy bận: nếu cài `psutil`, CPU trên 80% thì Mochi toát mồ hôi, đi chậm lại và giảm tốc độ vẽ; xuống dưới 65% mới hết (khoảng giữa hai ngưỡng để không nhấp nháy). Đọc CPU 8 giây một lần
 - Chế độ yên lặng: không nói vu vơ, không âm thanh, giảm tốc độ vẽ khi đứng yên. Tự bật khi có ứng dụng toàn màn hình (KDE), tắt được trong Cài đặt
 - Nhắc việc do bạn tự đặt: lặp lại sau mỗi N phút ("Uống nước đi!") hoặc hằng ngày vào giờ nhất định, chọn được các ngày trong tuần. Đến hạn Mochi nói câu nhắc bằng bong bóng, nhún nhảy và kêu chuông (trừ khi yên lặng hoặc tắt âm). Chuột phải → Nhắc việc...

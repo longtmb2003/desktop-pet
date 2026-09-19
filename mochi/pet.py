@@ -8,7 +8,7 @@ from PySide6.QtCore import QElapsedTimer, QFileSystemWatcher, QPoint, Qt, QTimer
 from PySide6.QtGui import QCursor, QDesktopServices, QGuiApplication, QPainter, QTransform
 from PySide6.QtWidgets import QApplication, QMenu, QWidget
 
-from . import autostart, desktop, modes, monitor, physics
+from . import autostart, desktop, modes, monitor, physics, sleep
 from . import reminders as rem
 from .bubble import SpeechBubble
 from .pomodoro import Pomodoro
@@ -54,6 +54,9 @@ class Pet(QWidget):
         self.pomo, self.hot, self.cpu, self.read_cpu = Pomodoro(), False, monitor.Hysteresis(), monitor.cpu_percent
         self.mon_timer = QTimer(self, interval=monitor.POLL_MS, timeout=self.poll_cpu)
         self.last_touch, self.now_hour = -1e9, lambda: datetime.now().hour      # local time zone; tests replace now_hour
+        self.now_time = lambda: datetime.now().time()
+        self.locked = self.suspended = False                                    # told by the PowerWatcher (power.py)
+        self.sleeping_for, self.power = "", None                                # why it fell asleep by itself: "system" | "nap" | "night"
         self.bubble, self.fullscreen = SpeechBubble(), False    # fullscreen: pushed by the platform (kwin.js)
         self.next_chat = random.uniform(60, 180)
         self.click_timer = QTimer(self, singleShot=True, interval=CLICK_DELAY_MS, timeout=self.pet_it)
@@ -143,7 +146,7 @@ class Pet(QWidget):
                 if edge: self.facing = -edge                                # after shoving the edge, never walk straight back into it
             self.move(int(self.px), int(self.py))
         if self.pomo.active: self.pomodoro_event(self.pomo.poll())
-        if self.t >= self.next_check: self.next_check = self.t + 1.0; self.check_reminders()
+        if self.t >= self.next_check: self.next_check = self.t + 1.0; self.check_reminders(); self.check_sleep()
         if self.t > self.next_chat:
             self.next_chat = self.t + random.uniform(120, 300)
             if self.state.motion in (Motion.IDLE, Motion.WALK): self.say(self.idle_remark(), chatter=True)
@@ -172,18 +175,59 @@ class Pet(QWidget):
         m = modes.available(self.cfg.custom_modes)
         return m.get(self.cfg.mode) or m["normal"]
 
+    # ---- sleep -----------------------------------------------------------
+    def sleep_reason(self):
+        """why it should be asleep now: "system" (screen locked / computer sleeping), "nap", "night", or "" (awake)"""
+        if self.cfg.sleep_system and (self.locked or self.suspended): return "system"
+        return sleep.scheduled(self.now_time(), self.cfg)
+
+    def attach_power(self, watcher):
+        self.power = watcher
+
+    def on_lock(self, locked):
+        self.locked = locked
+        self.check_sleep()
+
+    def on_suspend(self, going_to_sleep):
+        self.suspended = going_to_sleep
+        self.check_sleep()
+
+    def check_sleep(self):
+        """put it to sleep when it should be, and wake it (yawn, greeting) when the reason has passed. Sleep it chose itself only:
+        one you asked for from the menu is left alone"""
+        reason = self.sleep_reason()
+        if reason:
+            if self.sleeping_for and self.state.motion is Motion.SLEEP: self.sleeping_for = reason        # (say, a nap began while locked)
+            settled = self.grounded and self.state.motion in (Motion.IDLE, Motion.WALK)
+            handled = reason != "system" and self.t - self.last_touch <= 20                # not while it is being played with
+            if settled and not handled and not (reason != "system" and self.pomo.focusing):
+                self.sleeping_for = reason
+                self.enter(State(Motion.SLEEP))
+        elif self.sleeping_for:
+            was, self.sleeping_for = self.sleeping_for, ""
+            if self.state.motion is Motion.SLEEP:
+                self.enter(State(action=Action.YAWN))
+                self.say("Chào mừng bạn quay lại!" if was == "system" else "Ưm... dậy rồi!", chatter=True)
+
     def stay_state(self):
-        """what the active mode or a Pomodoro focus keeps the pet doing, or None"""
+        """what keeps the pet doing one thing: asleep (screen locked, computer asleep, nap or night), a Pomodoro focus, or the
+        active mode. None if nothing does"""
         if not self.grounded: return None
-        stay = self.mode().stay
-        if self.pomo.focusing or stay == "work": return State(action=Action.WORK)
-        if stay == "sleep" and self.t - self.last_touch > 20: return State(Motion.SLEEP)       # (not right after being played with)
+        reason, stay = self.sleep_reason(), self.mode().stay
+        if reason == "system": return State(Motion.SLEEP)
+        if self.pomo.focusing: return State(action=Action.WORK)
+        idle_for_a_while = self.t - self.last_touch > 20                                 # (not right after being played with)
+        if reason and idle_for_a_while: return State(Motion.SLEEP)
+        if stay == "work": return State(action=Action.WORK)
+        if stay == "sleep" and idle_for_a_while: return State(Motion.SLEEP)
         return None
 
     def next_state(self):
         """the state after the current one runs out"""
-        return self.stay_state() or after(self.state, hour=self.hour(), chase=self.cfg.chase,
-                                          weights=modes.weights(self.defn.behaviors, self.mode().boost))
+        s = self.stay_state()
+        if s == State(Motion.SLEEP) and self.sleep_reason(): self.sleeping_for = self.sleep_reason()      # so it wakes when that ends
+        return s or after(self.state, hour=self.hour(), chase=self.cfg.chase,
+                          weights=modes.weights(self.defn.behaviors, self.mode().boost))
 
     def find_mode(self, key):
         """a mode id from an id or a name (any case), or None"""

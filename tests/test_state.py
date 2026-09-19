@@ -1,7 +1,7 @@
 import math
 import random
 
-from mochi.state import Action, Expression, Motion, State, after, duration, ends_at, pick_next
+from mochi.state import BEHAVIORS, Action, Expression, Motion, State, after, duration, ends_at, pick_next
 
 RNG = random.Random(1)
 
@@ -21,7 +21,8 @@ def test_pick_next_never_repeats_the_current_behaviour():
 
 def test_pick_next_covers_every_behaviour():
     picks = [pick_next(State(Motion.DRAG), RNG) for _ in range(500)]
-    assert len({(s.motion, s.action) for s in picks}) == 7
+    assert len({(s.motion, s.action) for s in picks}) == 6                          # every behaviour except sleeping
+    assert all(s.motion is not Motion.SLEEP for s in picks)
 
 
 def test_duration():
@@ -37,9 +38,8 @@ def test_after_happy_returns_to_idle():
     assert after(State(expression=Expression.HAPPY), RNG) == State()
 
 
-def test_after_yawn_naps_or_idles():
-    outs = {after(State(action=Action.YAWN), RNG) for _ in range(100)}
-    assert outs == {State(Motion.SLEEP), State()}
+def test_a_yawn_is_only_a_yawn_it_never_ends_in_a_nap():
+    assert {after(State(action=Action.YAWN), RNG, hour=h) for h in (None, 3, 14, 23) for _ in range(30)} == {State()}
 
 
 def test_after_ordinary_state_changes_behaviour():
@@ -74,42 +74,38 @@ def test_push_is_a_short_one_shot_and_ends_by_turning_round_or_sitting():
     assert all(pick_next(State(), RNG).action is not Action.PUSH for _ in range(200))    # only ever started by reaching an edge
 
 
-def freq(hour, n=4000, chase=True, cur=None):
-    cur, rng = cur or State(Motion.SLEEP), random.Random(7)
+def freq(hour, n=4000, chase=True, cur=None, weights=None):
+    cur, rng = cur or State(Motion.WALK), random.Random(7)
     out = {}
     for _ in range(n):
-        s = pick_next(cur, rng, hour=hour, chase=chase)
+        s = pick_next(cur, rng, hour=hour, chase=chase, weights=weights)
         out[(s.motion, s.action)] = out.get((s.motion, s.action), 0) + 1
     return out
 
 
-def test_after_midnight_it_is_much_more_likely_to_sleep_and_less_to_chase():
-    day, night = freq(14, cur=State(Motion.IDLE)), freq(2, cur=State(Motion.IDLE))
-    assert night[(Motion.SLEEP, Action.NONE)] > 2.5 * day[(Motion.SLEEP, Action.NONE)]
-    assert night[(Motion.WALK, Action.CHASE)] < 0.5 * day[(Motion.WALK, Action.CHASE)]
+def test_it_never_picks_sleep_at_any_hour_even_if_a_pet_lists_it():
+    listed = dict(BEHAVIORS); listed[(Motion.SLEEP, Action.NONE)] = 50                # a character pack that asks for lots of sleep
+    for h in (None, 0, 3, 12, 14, 22, 23):
+        assert (Motion.SLEEP, Action.NONE) not in freq(h, weights=listed)
+    only = {(Motion.SLEEP, Action.NONE): 1}
+    assert pick_next(State(), random.Random(1), weights=only) == State(Motion.SLEEP)          # (a pet that does nothing else)
 
 
-def test_evening_only_calms_the_chasing_and_does_not_push_it_to_sleep():
-    day, eve = freq(14, cur=State(Motion.IDLE)), freq(22, cur=State(Motion.IDLE))
+def test_the_evening_and_night_calm_the_chasing_and_the_day_does_not():
+    day, eve, night = (freq(h, cur=State()) for h in (14, 22, 2))
     assert eve[(Motion.WALK, Action.CHASE)] < 0.5 * day[(Motion.WALK, Action.CHASE)]
-    assert abs(eve[(Motion.SLEEP, Action.NONE)] - day[(Motion.SLEEP, Action.NONE)]) < 250
+    assert night[(Motion.WALK, Action.CHASE)] < 0.5 * day[(Motion.WALK, Action.CHASE)]
 
 
 def test_no_hour_means_no_time_of_day_effect_and_boundaries_are_where_the_docs_say():
     from mochi.state import is_night
-    assert freq(None, cur=State(Motion.IDLE)) == freq(14, cur=State(Motion.IDLE))        # 14:00 is neutral too
-    assert [h for h in range(24) if is_night(h)] == [0, 1, 2, 3, 4, 5]
+    assert freq(None, cur=State()) == freq(14, cur=State())                          # 14:00 is neutral too
+    assert [h for h in range(24) if is_night(h)] == [0, 1, 2, 3, 4, 5, 22, 23]
 
 
 def test_chase_can_be_switched_off():
     assert (Motion.WALK, Action.CHASE) not in freq(14, chase=False)
     assert all(pick_next(State(), random.Random(i), chase=False).action is not Action.CHASE for i in range(300))
-
-
-def test_a_night_time_yawn_ends_in_sleep_far_more_often():
-    day = sum(after(State(action=Action.YAWN), random.Random(i), hour=14).motion is Motion.SLEEP for i in range(400))
-    night = sum(after(State(action=Action.YAWN), random.Random(i), hour=3).motion is Motion.SLEEP for i in range(400))
-    assert night > 280 and day < 240                                          # about 80% vs 50%
 
 
 def test_activity_shortens_only_the_plain_stretches():

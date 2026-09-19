@@ -60,5 +60,5 @@ def test_boosting_weights_multiplies_only_the_named_behaviours_and_leaves_the_or
     w = modes.weights(BEHAVIORS, {"chase": 4, "idle": 2})
     assert w[(Motion.WALK, Action.CHASE)] == 4 * BEHAVIORS[(Motion.WALK, Action.CHASE)]
     assert w[(Motion.IDLE, Action.NONE)] == 2 * BEHAVIORS[(Motion.IDLE, Action.NONE)]
-    assert w[(Motion.SLEEP, Action.NONE)] == BEHAVIORS[(Motion.SLEEP, Action.NONE)]
+    assert w[(Motion.WALK, Action.NONE)] == BEHAVIORS[(Motion.WALK, Action.NONE)]
     assert BEHAVIORS == orig and modes.weights(BEHAVIORS, {}) is BEHAVIORS

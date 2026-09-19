@@ -1,8 +1,9 @@
 """The Settings window. Every control writes to Settings and takes effect immediately; there is no OK/Apply."""
-from PySide6.QtCore import QSignalBlocker, Qt
-from PySide6.QtWidgets import QCheckBox, QComboBox, QDialog, QFormLayout, QHBoxLayout, QLabel, QPushButton, QSlider, QSpinBox, QVBoxLayout
+from PySide6.QtCore import QSignalBlocker, Qt, QTime
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFormLayout, QHBoxLayout, QLabel, QPushButton, QSlider, QSpinBox, QTimeEdit,
+                               QVBoxLayout)
 
-from . import autostart, modes, monitor
+from . import autostart, modes, monitor, sleep
 from .renderer import THEMES
 
 
@@ -41,8 +42,9 @@ class SettingsDialog(QDialog):
         self.boxes = {}
         for key, text in (("chase", "Cho phép chạy đuổi theo con trỏ"), ("chatter", "Thỉnh thoảng nói vu vơ"),
                           ("desktop", "Nhận xét về các mục trên màn hình nền"),
-                          ("time_of_day", "Theo giờ trong ngày (đêm buồn ngủ hơn)"), ("sound", "Âm thanh (báo hết giờ Pomodoro)"),
+                          ("time_of_day", "Theo giờ trong ngày (buổi tối bớt chạy đuổi)"), ("sound", "Âm thanh (báo hết giờ Pomodoro)"),
                           ("monitor", "Phản ứng khi máy bận (CPU cao)"), ("quiet", "Chế độ yên lặng"),
+                          ("sleep_system", "Ngủ khi khoá màn hình hoặc máy vào chế độ ngủ"),
                           ("quiet_auto", "Tự yên lặng khi có ứng dụng toàn màn hình")):
             self.boxes[key] = self.box(text, getattr(self.cfg, key), lambda on, k=key: self.set_flag(k, on))
             form.addRow(self.boxes[key])
@@ -52,6 +54,17 @@ class SettingsDialog(QDialog):
         self.autostart = self.box("Tự chạy khi đăng nhập", autostart.is_enabled(), self.set_autostart)
         form.addRow(self.autostart)
 
+        self.times = {}
+        for key, label in (("nap", "Ngủ trưa"), ("night", "Ngủ tối")):
+            self.boxes[f"{key}_on"] = self.box(label, getattr(self.cfg, f"{key}_on"), lambda on, k=f"{key}_on": self.set_flag(k, on))
+            row = QHBoxLayout(); row.addWidget(self.boxes[f"{key}_on"])
+            for part, word in (("from", "từ"), ("to", "đến")):
+                t = QTimeEdit(); t.setDisplayFormat("HH:mm")
+                self.times[f"{key}_{part}"] = t
+                t.setTime(self.time_of(f"{key}_{part}"))
+                t.timeChanged.connect(lambda qt, k=f"{key}_{part}": self.set_time(k, qt))
+                row.addWidget(QLabel(word)); row.addWidget(t)
+            form.addRow(row)
         self.focus = QSpinBox(); self.focus.setRange(1, 180); self.focus.setSuffix(" phút"); self.focus.setValue(self.cfg.focus_min)
         self.focus.valueChanged.connect(lambda v: setattr(self.cfg, "focus_min", v))
         self.rest = QSpinBox(); self.rest.setRange(1, 60); self.rest.setSuffix(" phút"); self.rest.setValue(self.cfg.break_min)
@@ -63,6 +76,14 @@ class SettingsDialog(QDialog):
         back = QPushButton("Gọi Mochi về / đặt lại vị trí"); back.clicked.connect(pet.bring_back)
         lay.addWidget(back)
         self.back = back
+
+    def time_of(self, key):
+        t = sleep.parse_time(getattr(self.cfg, key), sleep.DEFAULTS[key])
+        return QTime(t.hour, t.minute)
+
+    def set_time(self, key, qt):
+        setattr(self.cfg, key, qt.toString("HH:mm"))
+        self.pet.apply_settings()
 
     def choose_mode(self, mid):
         self.pet.set_mode(mid)
@@ -84,6 +105,8 @@ class SettingsDialog(QDialog):
             if hasattr(w, "label"): w.label.setText(f"{v}%")
         for k, b in self.boxes.items():
             with QSignalBlocker(b): b.setChecked(bool(getattr(c, k)))
+        for k, t in self.times.items():
+            with QSignalBlocker(t): t.setTime(self.time_of(k))
 
     @staticmethod
     def box(text, on, slot):
