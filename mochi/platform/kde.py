@@ -11,6 +11,7 @@ from PySide6.QtDBus import QDBusConnection, QDBusInterface, QDBusMessage
 from PySide6.QtWidgets import QApplication
 
 from ..api import PATH, SERVICE, Api
+from ..bubble import clean_text
 from .base import Platform
 
 log = logging.getLogger("mochi")
@@ -45,6 +46,15 @@ class Bus(Api):
     def __init__(self, on_windows, pet=None):
         super().__init__(pet)
         self.on_windows, self.last_warn, self.dropped = on_windows, -WARN_EVERY, 0
+
+    @Slot(str, str)
+    def active(self, window_id, window_class):
+        """the window the user is working in ("" if none) and its program class; only steers where and how the pet plays"""
+        if self.pet is None: return
+        try:
+            self.pet.set_active(clean_text(window_id)[:64], clean_text(window_class)[:80])
+        except Exception as e:                     # untrusted input: never let it out of the slot
+            log.warning("ignored bad active-window report: %s", e)
 
     @Slot(bool)
     def fullscreen(self, on):
