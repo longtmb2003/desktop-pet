@@ -168,9 +168,18 @@ class Pet(QWidget):
         """(window-y of the surface under the feet, id of the window it is or None for the screen floor)"""
         best, wid = g.bottom() + 1, None
         for i, (x, y, w, h) in self.wins.items():
-            if x + 24 <= cx <= x + w - 24 and y >= g.top() + HEAD and y < best and (y >= feet - 6 or i == self.support):
+            if x + 24 <= cx <= x + w - 24 and y >= g.top() + HEAD and y < best and (y >= feet - 6 or i == self.support) \
+                    and not self.covered(i, cx, y + 1):
                 best, wid = y, i
         return best - FEET, wid
+
+    def covered(self, i, x, y):
+        """is point (x, y) hidden under a window stacked above window i? (self.wins is ordered bottom -> top)"""
+        above = False
+        for j, (wx, wy, ww, wh) in self.wins.items():
+            if above and wx <= x <= wx + ww and wy <= y < wy + wh: return True
+            above = above or j == i
+        return False
 
     def span(self, g, wid):
         """x-range the centre may walk in: the screen, or the top of the window we stand on"""
@@ -203,10 +212,11 @@ class Pet(QWidget):
                 self.facing = -out
 
     def hop_to(self, cx, feet, g):
-        for x, y, w, h in self.wins.values():
+        for i, (x, y, w, h) in self.wins.items():
             up = feet - y                                          # how high the top is above our feet
             if 20 < up < 200 and y >= g.top() + HEAD and x - 120 < cx < x + w + 120:
                 tx = max(x + 40, min(x + w - 40, cx))              # aim for a spot on top, then solve the arc
+                if self.covered(i, tx, y + 1): continue            # that spot is under another window
                 vy = -math.sqrt(2 * GRAVITY * (up + 40))
                 t = (-vy + math.sqrt(vy * vy - 2 * GRAVITY * up)) / GRAVITY
                 self.vy, self.vx = vy, (tx - cx) / t
