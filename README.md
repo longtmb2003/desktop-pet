@@ -203,7 +203,8 @@ Build lại icon / ảnh xem trước: `python scripts/make_icon.py`, `python sc
 - **v0.3:** ném pet bằng chuột (quán tính), va chạm cạnh màn hình, chóng mặt, lắc, double-click lộn vòng, hoảng sợ khi cửa sổ biến mất, đẩy tường. (xong)
 - **v0.4:** bong bóng thoại, Pomodoro, phản ứng theo giờ/CPU, API DBus, cửa sổ Cài đặt và chế độ yên lặng. (xong)
 - **v0.5:** nhân vật là dữ liệu: đổi được giữa Mochi và các gói ảnh (như Hà Nhân), mỗi nhân vật có cỡ, tốc độ, hành vi, lời thoại riêng; chỉnh cỡ pet. Chưa có: nhiều pet chạy cùng lúc. (xong)
-- **v0.6 (bản này):** nhắc việc tự đặt, chế độ có sẵn và tự tạo, tương tác với các mục trên màn hình nền (thả file, mở, nhận xét), lời thoại lâu hơn.
+- **v0.6:** nhắc việc tự đặt, chế độ có sẵn và tự tạo, tương tác với các mục trên màn hình nền (thả file, mở, nhận xét), lời thoại lâu hơn. (xong)
+- **v0.7 (bản này):** Hà Nhân đạp xe ba bánh, tay vẽ có ống tay áo thon và bàn tay 5 ngón (mắng người, cầm biển "BẬN"), nghịch ngợm trên cửa sổ đang làm việc, lịch ngủ (khoá màn hình, ngủ trưa, ngủ tối), mặt cười lộ răng.
 
 ## License
 
