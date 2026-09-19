@@ -239,14 +239,44 @@ class Pet(QWidget):
         """switch mode: apply its settings, and keep the pet at what it asks for. False if there is no such mode"""
         mid = self.find_mode(key)
         if mid is None: return False
-        m = modes.available(self.cfg.custom_modes)[mid]
+        m, old = modes.available(self.cfg.custom_modes)[mid], self.mode()
         for k, v in m.values.items(): setattr(self.cfg, k, v)
         self.cfg.mode = mid
         self.apply_settings()
         if getattr(self, "dialog", None) is not None: self.dialog.reload()
-        if self.state.motion in (Motion.IDLE, Motion.WALK, Motion.SLEEP) and (s := self.stay_state()): self.enter(s)
+        if self.state.motion in (Motion.IDLE, Motion.WALK, Motion.SLEEP):
+            s = self.stay_state()
+            if s: self.enter(s)
+            elif (old.stay == "work" and self.state.action is Action.WORK) or (old.stay == "sleep" and self.state.motion is Motion.SLEEP):
+                self.release_stay()                                          # the old mode held it there: it is free now, at once
         self.say(f"Chế độ: {m.name}", urgent=True)
         return True
+
+    def sync_work(self):
+        """make the animation match the Pomodoro at once: at the laptop/sign while focus runs, released when it stops (unless a mode
+        or the sleep schedule holds it somewhere else)"""
+        target = self.stay_state()
+        if self.state.action is Action.WORK and target != State(action=Action.WORK):
+            self.enter(target or State())
+        elif target == State(action=Action.WORK) and self.state.motion in (Motion.IDLE, Motion.WALK, Motion.SLEEP):
+            self.enter(target)
+
+    def pomo_pause(self):
+        self.pomo.pause(); self.sync_work()
+
+    def pomo_resume(self):
+        self.pomo.resume(); self.sync_work()
+
+    def pomo_reset(self):
+        self.pomo.reset(); self.sync_work()
+
+    def release_stay(self):
+        """stop doing what a mode kept it doing (working, sleeping): wake up with a yawn, or just carry on with life"""
+        if self.state.motion is Motion.SLEEP:
+            self.sleeping_for = ""
+            self.enter(State(action=Action.YAWN))
+        else:
+            self.enter(State())
 
     def save_mode(self, name):
         """keep the current settings as a mode of the user's own, and switch to it; ValueError if the name is empty"""
@@ -514,9 +544,9 @@ class Pet(QWidget):
         pm = m.addMenu("Pomodoro")
         pm.addAction(self.pomo.label()).setEnabled(False)
         if not self.pomo.active: pm.addAction(f"Bắt đầu ({self.cfg.focus_min} phút)", self.start_focus)
-        elif self.pomo.paused: pm.addAction("Tiếp tục", self.pomo.resume)
-        else: pm.addAction("Tạm dừng", self.pomo.pause)
-        if self.pomo.active: pm.addAction("Đặt lại", self.pomo.reset)
+        elif self.pomo.paused: pm.addAction("Tiếp tục", self.pomo_resume)
+        else: pm.addAction("Tạm dừng", self.pomo_pause)
+        if self.pomo.active: pm.addAction("Đặt lại", self.pomo_reset)
         a = m.addAction("Chế độ yên lặng"); a.setCheckable(True); a.setChecked(self.cfg.quiet)
         a.toggled.connect(lambda on: (setattr(self.cfg, "quiet", on), self.apply_settings()))
         mm = m.addMenu("Chế độ")

@@ -164,3 +164,77 @@ def test_the_pomodoro_still_wins_over_a_mode_that_would_wander(floor, monkeypatc
     floor.start_focus(25)
     floor.until = 0.0; floor.tick()
     assert floor.state == State(action=Action.WORK) and mp is not None
+
+
+# ---- leaving a mode that held it in one animation -----------------------------------------------------------------
+def test_leaving_work_mode_ends_the_laptop_at_once_not_when_the_timer_runs_out(floor):
+    floor.set_mode("work")
+    assert floor.state == State(action=Action.WORK)
+    floor.set_mode("normal")
+    assert floor.state.action is not Action.WORK and floor.state.motion is not Motion.SLEEP
+
+
+def test_leaving_sleep_mode_wakes_it_with_a_yawn_at_once(floor):
+    floor.set_mode("sleep")
+    assert floor.state == State(Motion.SLEEP)
+    floor.set_mode("play")
+    assert floor.state == State(action=Action.YAWN) and floor.sleeping_for == ""
+    floor.until = 0.0; floor.tick()
+    assert floor.state.motion is not Motion.SLEEP                                # and it stays awake
+
+
+@pytest.mark.parametrize("first,second,expected", [("sleep", "work", State(action=Action.WORK)), ("work", "sleep", State(Motion.SLEEP))])
+def test_switching_between_two_modes_that_hold_it_changes_the_animation_at_once(floor, first, second, expected):
+    floor.set_mode(first); floor.set_mode(second)
+    assert floor.state == expected
+
+
+def test_a_mode_that_never_held_it_does_not_disturb_what_it_is_doing(floor):
+    floor.enter(State(Motion.SLEEP)); floor.until = float("inf")                 # a nap asked for from the menu
+    floor.set_mode("play")
+    assert floor.state == State(Motion.SLEEP)
+    floor.enter(State(action=Action.GROOM)); floor.until = float("inf")
+    floor.set_mode("normal"); assert floor.state == State(action=Action.GROOM)
+
+
+def test_a_pomodoro_or_a_scheduled_nap_still_holds_it_when_the_mode_lets_go(floor):
+    floor.set_mode("work"); floor.start_focus(25)
+    floor.set_mode("normal")
+    assert floor.state == State(action=Action.WORK)                              # the Pomodoro carries on
+    floor.pomo.reset(); floor.set_mode("sleep")
+    floor.now_time = lambda: __import__("datetime").time(12, 30)                 # and it is nap time
+    floor.set_mode("normal")
+    assert floor.state == State(Motion.SLEEP)
+
+
+def test_leaving_a_mode_from_the_dialog_does_the_same(floor):
+    floor.open_settings(); d = floor.dialog
+    floor.set_mode("work"); assert floor.state == State(action=Action.WORK)
+    d.mode.setCurrentIndex(d.mode.findData("normal"))
+    assert floor.state.action is not Action.WORK
+
+
+def test_pausing_resuming_and_resetting_a_pomodoro_change_the_animation_at_once(floor):
+    floor.start_focus(25)
+    assert floor.state == State(action=Action.WORK)
+    floor.pomo_pause(); assert floor.state.action is not Action.WORK              # not stuck at the laptop for the rest of its timer
+    floor.pomo_resume(); assert floor.state == State(action=Action.WORK)          # and straight back to it
+    floor.pomo_reset(); assert floor.state.action is not Action.WORK
+
+
+def test_stopping_a_pomodoro_does_not_undo_what_a_mode_or_the_schedule_holds(floor):
+    floor.set_mode("work"); floor.start_focus(25)
+    floor.pomo_reset(); assert floor.state == State(action=Action.WORK)           # work mode still wants the laptop
+    floor.set_mode("normal"); floor.start_focus(25)
+    floor.now_time = lambda: __import__("datetime").time(12, 30)
+    floor.pomo_reset(); assert floor.state == State(Motion.SLEEP)                 # it is nap time: it goes to sleep
+
+
+def test_the_pomodoro_menu_uses_the_synchronised_actions(floor):
+    floor.start_focus(25)
+    sub = next(a.menu() for a in floor.build_menu().actions() if a.text() == "Pomodoro")
+    sub.actions()[1].trigger()                                                    # "Tạm dừng"
+    assert floor.pomo.paused and floor.state.action is not Action.WORK
+    sub = next(a.menu() for a in floor.build_menu().actions() if a.text() == "Pomodoro")
+    sub.actions()[1].trigger()                                                    # "Tiếp tục"
+    assert floor.state == State(action=Action.WORK)
