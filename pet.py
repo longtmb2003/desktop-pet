@@ -69,7 +69,7 @@ class Pet(QWidget):
         self.setFixedSize(S, S)
         self.t = self.vy = self.squash = self.blink = 0.0
         self.facing, self.hearts = 1, []            # hearts: [x, y, life]
-        self.wins, self.support, self.vx, self.grounded = {}, None, 0.0, False   # wins: id -> (x, y, w, h); support: id of the window we stand on
+        self.wins, self.support, self.vx, self.grounded = {}, None, 0.0, False   # wins: id -> (x, y, w, h); support: id we stand on
         self.next_blink, self.moved, self.press, self.mask_key = 2.0, False, None, None
         self.cfg = QSettings("mochi-pet", "mochi")
         self.theme = self.cfg.value("theme", "Kem")
@@ -168,7 +168,7 @@ class Pet(QWidget):
     def surface(self, cx, feet, g):
         """(window-y of the surface under the feet, id of the window it is or None for the screen floor)"""
         best, wid = g.bottom() + 1, None
-        for i, (x, y, w, h) in self.wins.items():
+        for i, (x, y, w, _h) in self.wins.items():
             if x + 24 <= cx <= x + w - 24 and y >= g.top() + HEAD and y < best and (y >= feet - 6 or i == self.support) \
                     and not self.covered(i, cx, y + 1):
                 best, wid = y, i
@@ -213,7 +213,7 @@ class Pet(QWidget):
                 self.facing = -out
 
     def hop_to(self, cx, feet, g):
-        for i, (x, y, w, h) in self.wins.items():
+        for i, (x, y, w, _h) in self.wins.items():
             up = feet - y                                          # how high the top is above our feet
             if 20 < up < 200 and y >= g.top() + HEAD and x - 120 < cx < x + w + 120:
                 tx = max(x + 40, min(x + w - 40, cx))              # aim for a spot on top, then solve the arc
