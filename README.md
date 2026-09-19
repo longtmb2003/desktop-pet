@@ -26,7 +26,11 @@
 - Theo giờ trong ngày (giờ địa phương): từ 00:00 đến 06:00 dễ ngủ hơn, từ 22:00 bớt chạy đuổi. Không ép ngủ khi bạn vừa chơi với nó
 - Máy bận: nếu cài `psutil`, CPU trên 80% thì Mochi toát mồ hôi, đi chậm lại và giảm tốc độ vẽ; xuống dưới 65% mới hết (khoảng giữa hai ngưỡng để không nhấp nháy). Đọc CPU 8 giây một lần
 - Chế độ yên lặng: không nói vu vơ, không âm thanh, giảm tốc độ vẽ khi đứng yên. Tự bật khi có ứng dụng toàn màn hình (KDE), tắt được trong Cài đặt
-- Chuột phải: Màu / Pomodoro / Chế độ yên lặng / Cài đặt / Ngủ / Gọi về / Tạm dừng / Tự chạy khi đăng nhập / Thoát
+- Nhắc việc do bạn tự đặt: lặp lại sau mỗi N phút ("Uống nước đi!") hoặc hằng ngày vào giờ nhất định, chọn được các ngày trong tuần. Đến hạn Mochi nói câu nhắc bằng bong bóng, nhún nhảy và kêu chuông (trừ khi yên lặng hoặc tắt âm). Chuột phải → Nhắc việc...
+- Chế độ: Bình thường, Làm việc (ngồi gõ laptop suốt, ít nói, không chạy đuổi), Chơi đùa (hiếu động, hay chạy đuổi), Ngủ (ngủ liền, tắt tiếng), Yên lặng; và bạn lưu được cài đặt hiện tại thành chế độ của riêng mình. Đổi nhanh ở chuột phải → Chế độ
+- Màn hình nền: thả một file/icon lên Mochi thì nó phản ứng ("Nom nom! báo cáo.pdf ngon quá!"; nó không mở, không di chuyển, không xoá file); chuột phải → "Mở từ màn hình nền" liệt kê các mục trên desktop để Mochi mở giúp; thỉnh thoảng nó nhận xét về một mục nào đó
+- Lời thoại hiện 2,5 đến 5 giây tuỳ độ dài
+- Chuột phải: Màu / Chế độ / Pomodoro / Nhắc việc / Chế độ yên lặng / Cài đặt / Nhân vật / Mở từ màn hình nền / Ngủ / Gọi về / Tạm dừng / Tự chạy khi đăng nhập / Thoát
 
 ## Nền tảng hỗ trợ
 
@@ -58,6 +62,14 @@ Tiến trình chạy nền có tên `mochi`, hiện đúng tên đó trong Syste
 Chuột phải → **Cài đặt...** mở cửa sổ chỉnh: màu, tốc độ đi, tần suất hành vi, chạy đuổi, nói vu vơ, theo giờ trong ngày, âm thanh, theo dõi CPU, chế độ yên lặng (và tự bật khi toàn màn hình), tự chạy khi đăng nhập, độ dài Pomodoro, gọi Mochi về. Thay đổi có hiệu lực ngay và được nhớ (QSettings, `~/.config/mochi-pet/mochi.conf`). Giá trị hỏng trong file được thay bằng mặc định. Chưa có: đổi kích thước pet.
 
 Theo dõi CPU cần `psutil` (bản build sẵn có kèm; chạy từ mã nguồn thì `pip install psutil` hoặc `pip install ".[monitor]"`). Không có psutil thì mọi thứ khác vẫn chạy bình thường.
+
+## Nhắc việc, chế độ và màn hình nền
+
+**Nhắc việc** lưu trong cài đặt (JSON, tối đa 30). Nhắc lặp lại tính bằng đồng hồ đơn điệu, nên máy ngủ đông không làm dồn cục các lần nhắc; nhắc hằng ngày trễ quá 5 phút thì bỏ qua thay vì nhắc muộn. Đang có ứng dụng toàn màn hình (và "Tự yên lặng" bật) thì lời nhắc đợi đến khi hết toàn màn hình.
+
+**Chế độ** là một gói các cài đặt (tần suất, tốc độ, chạy đuổi, nói vu vơ, theo giờ, âm thanh, yên lặng) cộng với việc nghiêng về hành vi nào, hoặc giữ pet mãi ở một việc (ngủ / gõ laptop). Chọn chế độ thì các cài đặt đó được đặt lại theo chế độ; chỉnh tay sau đó vẫn được. Đang Pomodoro thì pet luôn ngồi gõ laptop bất kể chế độ.
+
+**Màn hình nền**: KDE không cho biết icon nằm ở đâu trên màn hình, và Mochi không tự bật hỗ trợ tiếp cận (AT-SPI) của cả phiên làm việc chỉ để dò icon. Vì vậy Mochi làm việc với **nội dung thư mục desktop** (tên các mục, đọc `Name=` của lối tắt `.desktop`), không với vị trí. Nó không đi tới đứng cạnh từng icon.
 
 ## Nhân vật (pet) và gói nhân vật
 
@@ -93,6 +105,7 @@ Mochi lắng nghe trên session bus, dịch vụ `org.mochi.Pet`, đường dẫ
 | `setExpression(s)` | `normal`, `happy`, `dizzy`, `scared`, `tired`; từ chối khi pet đang bị kéo hoặc đang bay |
 | `notifyTaskFinished(s)` | bong bóng "Xong rồi: …", pet nhảy mừng, chuông (trừ khi yên lặng hoặc tắt âm) |
 | `startPomodoro(i)` | bắt đầu tập trung `i` phút (1 đến 180) |
+| `setMode(s)` | đổi chế độ theo tên hoặc id (`normal`, `work`, `play`, `sleep`, `quiet`, hoặc chế độ của bạn) |
 
 Mỗi phương thức trả `true` nếu đã thực hiện, `false` nếu bị từ chối (đầu vào sai, hoặc quá 20 lời gọi trong 10 giây). Ví dụ:
 
@@ -147,6 +160,9 @@ mochi/
 ├── monitor.py    đọc CPU (psutil tuỳ chọn) và hysteresis
 ├── api.py        API DBus công khai (kiểm tra đầu vào, giới hạn tần suất)
 ├── settings_dialog.py  cửa sổ Cài đặt
+├── reminders.py  lịch nhắc việc (logic thuần, đồng hồ tiêm được); reminders_dialog.py là cửa sổ chỉnh
+├── modes.py      chế độ (có sẵn và của riêng bạn)
+├── desktop.py    các mục trên màn hình nền (tên, mở)
 ├── sound.py      tiếng chuông
 ├── renderer.py   vẽ vector, màu, vùng click
 ├── settings.py   lưu cài đặt (QSettings)
@@ -180,7 +196,8 @@ Build lại icon / ảnh xem trước: `python scripts/make_icon.py`, `python sc
 - **v0.2:** ổn định, tách kiến trúc, đóng gói. (xong)
 - **v0.3:** ném pet bằng chuột (quán tính), va chạm cạnh màn hình, chóng mặt, lắc, double-click lộn vòng, hoảng sợ khi cửa sổ biến mất, đẩy tường. (xong)
 - **v0.4:** bong bóng thoại, Pomodoro, phản ứng theo giờ/CPU, API DBus, cửa sổ Cài đặt và chế độ yên lặng. (xong)
-- **v0.5 (bản này):** nhân vật là dữ liệu: đổi được giữa Mochi và các gói ảnh (như Hà Nhân), mỗi nhân vật có cỡ, tốc độ, hành vi, lời thoại riêng; chỉnh cỡ pet. Chưa có: nhiều pet chạy cùng lúc.
+- **v0.5:** nhân vật là dữ liệu: đổi được giữa Mochi và các gói ảnh (như Hà Nhân), mỗi nhân vật có cỡ, tốc độ, hành vi, lời thoại riêng; chỉnh cỡ pet. Chưa có: nhiều pet chạy cùng lúc. (xong)
+- **v0.6 (bản này):** nhắc việc tự đặt, chế độ có sẵn và tự tạo, tương tác với các mục trên màn hình nền (thả file, mở, nhận xét), lời thoại lâu hơn.
 
 ## License
 

@@ -78,6 +78,11 @@ class Api(QObject):
         self.pet.celebrate()
         return True
 
+    @Slot(str, result=bool)
+    @guarded
+    def setMode(self, name):
+        return self.pet.set_mode(clean_text(name))
+
     @Slot(int, result=bool)
     @guarded
     def startPomodoro(self, minutes):

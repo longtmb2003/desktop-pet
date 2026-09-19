@@ -43,8 +43,11 @@ def test_the_backlog_is_capped_and_long_or_blank_text_is_sanitised():
     assert q.push("a\n\nb   c") and q.next() == "a b c"
 
 
-def test_reading_time_is_bounded():
-    assert show_ms("Á!") >= 1800 and show_ms("x" * 10_000) == 6000
+def test_reading_time_is_between_two_and_a_half_and_five_seconds():
+    assert show_ms("Á!") == 2500 and show_ms("x" * 10_000) == 5000
+    assert 2500 < show_ms("Nghỉ mắt một chút nhé!") < 5000                  # ordinary chatter lands in between
+    assert all(2500 <= show_ms("x" * n) <= 5000 for n in range(0, 300, 7))
+    assert [show_ms("x" * n) for n in range(0, 100, 10)] == sorted(show_ms("x" * n) for n in range(0, 100, 10))     # longer never shorter
 
 
 def test_bubbles_show_in_turn_and_then_go_away(qapp):

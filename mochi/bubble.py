@@ -18,9 +18,12 @@ def clean_text(text):
     return " ".join("".join(c if c.isprintable() else " " for c in str(text)).split())[:MAX_CHARS]
 
 
+MIN_MS, MAX_MS = 2500, 5000         # a message stays up between these (long enough to read, never long enough to bother)
+
+
 def show_ms(text):
-    """how long a message stays up: enough to read, never for long (it may sit over the user's work)"""
-    return int(min(6000, 1800 + 55 * len(text)))
+    """how long a message stays up: a base time plus a little per character, between MIN_MS and MAX_MS"""
+    return int(min(MAX_MS, max(MIN_MS, 2000 + 60 * len(text))))
 
 
 def place(px, py, w, h, g, size=S, top=FEET - 106):
