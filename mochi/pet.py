@@ -318,7 +318,7 @@ class Pet(QWidget):
         if self.press is not None or self.state.motion is Motion.DRAG or self.state.action is Action.FLIP: return
         self.enter(State(expression=Expression.HAPPY))
         self.vy = -420
-        self.hearts += [[random.uniform(-30, 30), -95, 1.2 + random.random() * .5] for _ in range(4)]
+        self.hearts += [[random.uniform(-30, 30), 11 - self.defn.height, 1.2 + random.random() * .5] for _ in range(4)]   # above its head
 
     def mouseDoubleClickEvent(self, e):
         self.click_timer.stop()                              # the first click's pet never happens

@@ -56,8 +56,9 @@ def pose(pet):
     if s.motion is Motion.DRAG: sy, rot = 1.04, math.sin(t * 6) * 3
     if s.expression is Expression.HAPPY and s.motion is not Motion.DRAG: dy = abs(math.sin(t * 10)) * pk.bob
     if s.expression is Expression.DIZZY and s.motion is not Motion.WALK: rot = math.sin(t * 4) * 9
+    tired = pet.hot or s.expression is Expression.TIRED
     if s.expression is Expression.SCARED: dx = math.sin(t * 45) * 1.5
-    if pet.hot and s.expression is Expression.NORMAL and not lying: rot, sy = rot + 3 * pet.facing, sy - 0.02
+    if tired and s.expression in (Expression.NORMAL, Expression.TIRED) and not lying: rot, sy = rot + 3 * pet.facing, sy - 0.02
     if s.action is Action.FLIP: spin = 360 * min(1, (t - pet.began) / pet.dur) * pet.facing
     sy -= pet.squash
     return dx, dy, rot, 2 - sy, sy, spin, lying
@@ -105,7 +106,8 @@ def paint_sprite(pet, p):
         for i in range(3):
             a = t * 5 + i * 2.094
             p.save(); p.translate(bw * 0.4 * math.cos(a), -bh - 4 + 9 * math.sin(a)); p.rotate(t * 90); p.drawPath(star(6)); p.restore()
-    if s.expression is Expression.SCARED or (pet.hot and s.expression is Expression.NORMAL and not lying):
+    tired = (pet.hot or s.expression is Expression.TIRED) and s.expression in (Expression.NORMAL, Expression.TIRED) and not lying
+    if s.expression is Expression.SCARED or tired:
         for i, sx_ in enumerate((-bw * 0.42, bw * 0.42) if s.expression is not Expression.SCARED else (bw * 0.42,)):
             ph = (t * 0.7 + i * 0.5) % 1
             p.setPen(Qt.NoPen); p.setBrush(QColor(110, 185, 255, int(math.sin(ph * math.pi) * 230)))
@@ -138,7 +140,8 @@ def sprite_mask(pet):
         key = (round(k, 3), pet.facing)
         if key not in pk.masks:
             img = pk.body.scaled(max(1, round(bw * k)), max(1, round(bh * k)), Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
-            if pet.facing < 0: img = img.flipped(Qt.Horizontal)
+            if pet.facing < 0:                                           # (`flipped` needs Qt 6.9; older PySide6 has `mirrored`)
+                img = img.flipped(Qt.Horizontal) if hasattr(img, "flipped") else img.mirrored(True, False)
             outline = QRegion()
             for y in range(img.height()):                                # anything faintly visible (the antialiased edge) is clickable
                 x = 0
@@ -157,10 +160,13 @@ def sprite_mask(pet):
         rect = QRectF((c - bh / 2 - 6) * k, (d.feet - bw - 66) * k, (bh + 40) * k, (bw + 70) * k)      # lying down, room for the zzz
         region = QRegion(rect.toRect())
     elif kind == "flip":
-        r = bh / 2 + 10
+        r = math.hypot(bw, bh) / 2 + 8                                    # its corners sweep this circle about the middle
         region = QRegion(QRectF((c - r) * k, (d.feet - bh / 2 - r) * k, 2 * r * k, 2 * r * k).toRect(), QRegion.Ellipse)
     else:
-        m = bh * math.sin(math.radians(14)) + 12
-        region = QRegion(QRectF((c - bw / 2 - m) * k, (d.feet - bh - 40) * k, (bw + 2 * m) * k, (bh + 46) * k).toRect())
+        th = math.radians(max(14, pk.sway + 3))                               # the widest lean: the pack's own waddle, or a push
+        hx = bw / 2                                                           # a body leaning about its feet sweeps this box
+        sin, cos = math.sin(th), math.cos(th)
+        reach, up, down = hx * cos + bh * sin + 12, bh * cos + hx * sin + pk.bob + 40, hx * sin + 8
+        region = QRegion(QRectF((c - reach) * k, (d.feet - up) * k, 2 * reach * k, (up + down) * k).toRect())
     for x, y, _ in pet.hearts: region += QRegion(QRect(round((c + x - 10) * k), round((d.feet + y - 10) * k), round(20 * k), round(20 * k)))
     return region.intersected(QRegion(0, 0, pet.size, pet.size))

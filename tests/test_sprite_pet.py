@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from conftest import write_pack
 from PySide6.QtCore import QPoint, QSettings
@@ -20,7 +22,7 @@ def pets(qapp, tmp_path):
 def make(qapp, tmp_path, pets):
     made = []
 
-    def build(pet="blob", scale=1.0):
+    def build(pet="blob", scale=1.0, pets=pets):
         cfg = Settings(QSettings(str(tmp_path / f"s{len(made)}.ini"), QSettings.IniFormat)); cfg.pet, cfg.scale = pet, scale
         p = Pet(cfg, pets); p.timer.stop(); p.clock.restart = lambda: 33
         made.append(p)
@@ -251,3 +253,59 @@ def test_switching_character_silences_the_old_ones_bubble(make):
     p.say("still talking", urgent=True)
     p.change_pet(p.pets["blob"], 1.0)
     assert not p.bubble.isVisible() and not p.bubble.queue.items
+
+
+@pytest.mark.parametrize("sway", [4, 20])
+def test_a_wide_boxy_pet_with_a_big_waddle_is_never_clipped_by_its_own_mask(qapp, tmp_path, make, sway):
+    """a rectangle 150 px wide and 100 tall, waddling up to 20 degrees: turning and leaning sweep its corners far out"""
+    wide = load_dir(write_pack(tmp_path / "wide", wide=True, id="wide", height=100, sway=sway))
+    p = make("wide", 1.0, {"mochi": MOCHI, "wide": wide})
+    for facing in (1, -1):
+        for state in STATES:
+            for k in range(8):
+                p.facing, p.state, p.hot, p.squash = facing, state, False, 0.0
+                p.grounded = state.motion not in (Motion.DRAG, Motion.AIRBORNE)
+                p.t, p.began, p.dur, p.hearts = 10.0 + k * 0.4, 10.0, 3.0, []
+                if state.action is Action.FLIP: p.t, p.began, p.dur = 10.0, 10.0 - 0.55 * k / 8, 0.55       # sweep the whole turn
+                left, edge = uncovered_and_clipped(p)
+                assert left < 40, f"clipped by the click mask (alpha {left}): {state} facing={facing} phase={k} sway={sway}"
+
+
+def test_tired_by_request_looks_tired_like_a_hot_cpu_does(make):
+    from mochi.sprite import pose
+    p = make("blob")
+    p.state, p.hot, p.facing, p.t = State(), False, 1, 10.0
+    calm = pose(p)
+    p.state = State(expression=Expression.TIRED)                         # e.g. setExpression("tired") over DBus
+    assert pose(p) != calm
+
+
+def test_hearts_rise_from_above_the_head_of_whatever_it_is(make):
+    p = make("blob", 1.0)
+    p.grounded = True; p.enter(State()); p.press = None
+    p.pet_it()
+    assert all(y == 11 - p.defn.height for _, y, _ in p.hearts)          # not from mid-body: a tall pet's head is far above Mochi's
+    m = make("mochi")
+    m.grounded = True; m.enter(State()); m.pet_it()
+    assert all(y == -95 for _, y, _ in m.hearts)                         # Mochi's hearts are exactly where they always were
+
+
+HANHAN = Path(__file__).resolve().parent.parent / "mochi" / "pets" / "packs" / "hanhan"
+
+
+@pytest.mark.skipif(not (HANHAN / "pack.json").exists(), reason="the Hà Nhân pack is local-only (artwork not in the repository)")
+@pytest.mark.parametrize("scale", [0.6, 1.0, 1.7])
+def test_the_real_hanhan_pack_is_never_clipped_in_any_pose(qapp, tmp_path, make, scale):
+    real = load_dir(HANHAN)
+    p = make("hanhan", scale, {"mochi": MOCHI, "hanhan": real})
+    for facing in (1, -1):
+        for state in STATES:
+            for hot in (False, True):
+                for k in range(6):
+                    p.facing, p.state, p.hot, p.squash = facing, state, hot, 0.0
+                    p.grounded = state.motion not in (Motion.DRAG, Motion.AIRBORNE)
+                    p.t, p.began, p.dur, p.hearts = 10.0 + k * 0.53, 10.0, 3.0, []
+                    if state.action is Action.FLIP: p.t, p.began, p.dur = 10.0, 10.0 - 0.55 * k / 5, 0.55
+                    left, edge = uncovered_and_clipped(p)
+                    assert left < 40, f"not clickable (alpha {left}): {state} facing={facing} hot={hot} phase={k}"
+                    assert edge < 40, f"cut off by the window edge (alpha {edge}): {state} facing={facing} hot={hot} phase={k}"

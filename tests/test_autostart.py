@@ -47,3 +47,12 @@ def test_cli(capsys):
     assert cli(["autostart", "status"]) and capsys.readouterr().out.strip().endswith("on")
     assert cli(["autostart", "off"]) and not autostart.is_enabled()
     assert cli([]) is False                                   # no arguments: start the GUI
+
+
+def test_cli_lists_the_characters(capsys, tmp_path, monkeypatch):
+    from conftest import write_pack
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
+    write_pack(tmp_path / "mochi-pet" / "pets" / "mine")
+    assert cli(["pets"])
+    out = capsys.readouterr().out
+    assert "mochi" in out and "blob" in out and "sprite" in out
