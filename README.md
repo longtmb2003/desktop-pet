@@ -10,9 +10,11 @@
 
 - Đi lại, ngồi, ngủ (có Zzz), chớp mắt, mắt nhìn theo con trỏ chuột
 - Tự chọn ngẫu nhiên các động tác: ngáp, vươn vai, liếm chân, và chạy đuổi theo con trỏ
-- Kéo thả để nhấc lên, thả ra thì rơi; bấm vào thì nhảy lên và bay trái tim
+- Kéo thả để nhấc lên, thả ra thì rơi
 - Ném được: hất chuột nhanh rồi thả, pet bay theo vận tốc, nảy khỏi cạnh màn hình/trần/sàn và mất dần năng lượng. Va rất mạnh thì chóng mặt (mắt chữ X, sao quay quanh đầu) và đi loạng choạng vài giây
 - Đứng và đi trên đỉnh các cửa sổ (đi theo khi bạn kéo cửa sổ), thỉnh thoảng nhảy lên cửa sổ gần đó; không đứng trên cửa sổ đang bị cửa sổ khác che
+- Bấm một lần: pet nhảy lên và bay trái tim (chờ 0,25 giây xem có bấm lần hai không). Bấm đúp: pet lộn một vòng 360° trên không
+- Lắc mạnh pet khi đang giữ: pet chóng mặt ngay trong tay bạn
 - Click xuyên qua phần trong suốt quanh pet
 - 5 màu (Kem, Cam, Xám, Bạc hà, Hồng), được nhớ cho lần chạy sau
 - Chuột phải: Màu / Ngủ / Gọi về / Tạm dừng / Tự chạy khi đăng nhập / Thoát

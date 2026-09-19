@@ -32,9 +32,10 @@ def star(r):
     return p
 
 
-def silhouette(f, sleep, stretch, hearts):
+def silhouette(f, sleep, stretch, hearts, flip=False):
     """Region of the pet window that should catch clicks; the rest is click-through. f = -facing."""
     c = S // 2
+    if flip: return QRegion(c - 110, FEET - 62 - 110, 220, 220, QRegion.Ellipse)    # a turning pet sweeps a circle around its middle
     r = QRegion(c - 72, FEET - 88, 144, 100, QRegion.Ellipse)                   # body
     r += QRegion(c - 66, FEET - 106, 132, 60)                                  # ears
     r += QRegion(c - 60, FEET - 14, 120, 28)                                    # feet + shadow
@@ -72,6 +73,8 @@ def paint(pet, p):
     sy -= pet.squash
     sx = 2 - sy if not drag else .94        # keep volume: taller = thinner
     p.translate(shift * pet.facing, -hop)
+    if act is Action.FLIP:                                                                         # one full turn about the body's middle
+        p.translate(0, -62); p.rotate(360 * min(1, (t - pet.began) / pet.dur) * pet.facing); p.translate(0, 62)
     p.rotate(tilt * pet.facing)
     p.scale(-sx * pet.facing, sy)                               # tail trails behind the walking direction
 

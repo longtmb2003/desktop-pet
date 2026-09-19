@@ -181,7 +181,7 @@ def test_release_uses_the_drag_history(pet, monkeypatch):
 
 # ---- dizzy ------------------------------------------------------------------------------------------------
 from mochi.physics import IMPACT_DIZZY  # noqa: E402
-from mochi.state import Expression  # noqa: E402
+from mochi.state import Action, Expression  # noqa: E402
 
 
 def run_until(pet, cond, frames=3000):
@@ -298,3 +298,89 @@ def test_the_shake_reaction_fires_once_per_drag(pet, monkeypatch):
     release(140, 100)
     held_and_moved(pet, monkeypatch)                                    # pick it up again: reset
     assert pet.shaken is False
+
+
+# ---- click vs double-click ------------------------------------------------------------------------------------
+def click_events(pet, monkeypatch):
+    from PySide6.QtCore import QEvent, QPointF, Qt
+    from PySide6.QtGui import QMouseEvent
+    monkeypatch.setattr("mochi.pet.time.monotonic", lambda: 50.0)
+
+    def ev(kind):
+        return QMouseEvent(kind, QPointF(100, 100), QPointF(100, 100), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
+    press = lambda: pet.mousePressEvent(ev(QEvent.MouseButtonPress))                         # noqa: E731
+    release = lambda: pet.mouseReleaseEvent(ev(QEvent.MouseButtonRelease))                   # noqa: E731
+    double = lambda: pet.mouseDoubleClickEvent(ev(QEvent.MouseButtonDblClick))               # noqa: E731
+    return press, release, double
+
+
+def on_the_floor(pet):
+    pet.px, pet.py, pet.vy, pet.vx, pet.support = 300, floor_y(pet), 0.0, 0.0, None
+    pet.enter(State(Motion.AIRBORNE)); run_until(pet, lambda: pet.state.motion is Motion.IDLE)
+
+
+def test_a_single_click_pets_only_after_the_double_click_delay(pet, monkeypatch):
+    on_the_floor(pet)
+    press, release, _ = click_events(pet, monkeypatch)
+    press(); release()
+    assert pet.state.expression is Expression.NORMAL and pet.click_timer.isActive()   # still waiting for a second click
+    pet.click_timer.timeout.emit()
+    assert pet.state.expression is Expression.HAPPY and pet.hearts and pet.vy < 0
+
+
+def test_a_double_click_flips_and_never_pets(pet, monkeypatch):
+    on_the_floor(pet)
+    press, release, double = click_events(pet, monkeypatch)
+    press(); release(); double(); release()
+    assert not pet.click_timer.isActive()                                   # the first click's pet was cancelled
+    assert pet.state == State(action=Action.FLIP) and pet.vy < 0 and not pet.hearts
+    seen = set()
+    run_until(pet, lambda: seen.add(pet.state.expression) or pet.state.action is not Action.FLIP)
+    assert seen == {Expression.NORMAL}                                      # never happy: no flip + happy double reaction
+    run_until(pet, lambda: pet.grounded, frames=5)                          # touches down within a few frames of the end
+    assert pet.py == floor_y(pet)
+
+
+def test_the_flip_lands_when_it_ends_and_clicks_during_it_are_ignored(pet, monkeypatch):
+    on_the_floor(pet)
+    press, release, double = click_events(pet, monkeypatch)
+    double()
+    pet.tick(); pet.tick()
+    press(); release(); pet.click_timer.timeout.emit()
+    assert pet.state.action is Action.FLIP                                  # a click mid-flip does not interrupt it
+    n = 0
+    while pet.state.action is Action.FLIP and n < 100: pet.tick(); n += 1
+    assert 15 <= n <= 18                                                    # 0.55 s at 33 ms/frame, minus the two ticks above
+    assert pet.py >= floor_y(pet) - 15                                      # back on the ground as the flip ends, not still in the air
+
+
+def test_a_double_click_on_an_airborne_pet_does_nothing(pet, monkeypatch):
+    _, _, double = click_events(pet, monkeypatch)
+    pet.enter(State(Motion.AIRBORNE)); pet.grounded = False
+    double()
+    assert pet.state == State(Motion.AIRBORNE)
+
+
+def test_a_delayed_pet_is_dropped_if_the_pet_is_being_dragged_by_then(pet, monkeypatch):
+    on_the_floor(pet)
+    press, release, _ = click_events(pet, monkeypatch)
+    press(); release(); press()                                             # second press starts a new interaction
+    pet.click_timer.timeout.emit()
+    assert pet.state.expression is Expression.NORMAL
+
+
+def test_every_visible_pixel_of_a_flipping_pet_is_clickable_and_inside_the_window(pet):
+    from PySide6.QtCore import QPoint
+    from PySide6.QtGui import QImage, QPainter
+    pet.grounded = False
+    for facing in (1, -1):
+        for k in range(12):
+            pet.facing, pet.state, pet.dur, pet.began, pet.t = facing, State(action=Action.FLIP), 0.55, 10.0, 10.0 + 0.55 * k / 11
+            pet.mask_key = None; pet.update_mask(); m = pet.mask(); pet.clearMask()      # render() would clip to the mask: draw unmasked
+            img = QImage(S, S, QImage.Format_ARGB32); img.fill(0)
+            pt = QPainter(img); pet.render(pt, QPoint(0, 0)); pt.end()
+            for y in range(S):
+                for x in range(S):
+                    if img.pixel(x, y) >> 24 > 40:
+                        assert m.contains(QPoint(x, y)), (facing, k, x, y)
+                        assert 0 < x < S - 1 and 0 < y < S - 1, ("clipped by the window edge", facing, k, x, y)

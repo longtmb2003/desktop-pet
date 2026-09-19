@@ -13,6 +13,7 @@ from .renderer import THEMES, paint, silhouette
 from .settings import Settings
 from .state import Action, Expression, Motion, State, after, ends_at
 
+CLICK_DELAY_MS = 250                # a click waits this long for a second click before it counts as a pet
 MAX_DT = 0.05                       # cap one frame's time step so a stall can't launch the pet through a window
 
 
@@ -33,6 +34,7 @@ class Pet(QWidget):
         self.px, self.py = random.uniform(g.left + 80, g.right - 240), g.top - 100
         self.enter(State(Motion.AIRBORNE))
         self.clock = QElapsedTimer(); self.clock.start()   # real frame time, see tick()
+        self.click_timer = QTimer(self, singleShot=True, interval=CLICK_DELAY_MS, timeout=self.pet_it)
         self.timer = QTimer(self, interval=33, timeout=self.tick)
         self.timer.start()
         QGuiApplication.instance().screenRemoved.connect(lambda _: QTimer.singleShot(0, self.ensure_visible))
@@ -141,10 +143,11 @@ class Pet(QWidget):
     def update_mask(self):
         # clip the window to the pet's silhouette so clicks pass through the transparent rest
         f, sleep, stretch = -self.facing, self.state.motion is Motion.SLEEP, self.state.action is Action.STRETCH
-        key = (f, sleep, stretch, tuple((int(x), int(y)) for x, y, _ in self.hearts))
+        flip = self.state.action is Action.FLIP
+        key = (f, sleep, stretch, flip, tuple((int(x), int(y)) for x, y, _ in self.hearts))
         if key == self.mask_key: return
         self.mask_key = key
-        self.setMask(silhouette(f, sleep, stretch, self.hearts))
+        self.setMask(silhouette(f, sleep, stretch, self.hearts, flip))
 
     # ---- input -----------------------------------------------------------
     def mousePressEvent(self, e):
@@ -176,10 +179,21 @@ class Pet(QWidget):
         self.press = None
         if self.moved:
             self.throw(*self.drag.velocity(time.monotonic()))
-        else:                                                # a click = a pet
-            self.enter(State(expression=Expression.HAPPY))
-            self.vy = -420
-            self.hearts += [[random.uniform(-30, 30), -95, 1.2 + random.random() * .5] for _ in range(4)]
+        else:
+            self.click_timer.start()                         # a click = a pet, unless a second click turns it into a flip
+
+    def pet_it(self):
+        if self.press is not None or self.state.motion is Motion.DRAG or self.state.action is Action.FLIP: return
+        self.enter(State(expression=Expression.HAPPY))
+        self.vy = -420
+        self.hearts += [[random.uniform(-30, 30), -95, 1.2 + random.random() * .5] for _ in range(4)]
+
+    def mouseDoubleClickEvent(self, e):
+        self.click_timer.stop()                              # the first click's pet never happens
+        if e.button() != Qt.LeftButton or not self.grounded or self.state.motion in (Motion.DRAG, Motion.AIRBORNE): return
+        self.enter(State(action=Action.FLIP))
+        self.vy = -physics.GRAVITY * self.dur / 2            # airborne for exactly the length of the flip
+        self.hearts = []
 
     def contextMenuEvent(self, e):
         m = QMenu(self)
