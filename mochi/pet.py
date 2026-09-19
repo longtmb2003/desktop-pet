@@ -154,6 +154,12 @@ class Pet(QWidget):
         self.say(f"Tập trung nào! {minutes or self.cfg.focus_min} phút", urgent=True)
         if self.grounded and self.state.motion in (Motion.IDLE, Motion.WALK, Motion.SLEEP): self.enter(State(action=Action.WORK))
 
+    def celebrate(self):
+        """a happy little hop (and a chime, unless quiet or muted); for good news from outside"""
+        if self.grounded and self.state.motion in (Motion.IDLE, Motion.WALK, Motion.SLEEP):
+            self.enter(State(expression=Expression.HAPPY)); self.vy = -420
+        if self.cfg.sound and not self.quiet: chime()
+
     def pomodoro_event(self, ev):
         if ev is None: return
         msg = {"focus_done": f"Hết giờ tập trung! Nghỉ {self.cfg.break_min} phút nhé", "break_done": "Hết giờ nghỉ, làm tiếp nào?"}[ev]

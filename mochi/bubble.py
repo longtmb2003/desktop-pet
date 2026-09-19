@@ -13,6 +13,11 @@ GAP_MS = 250                        # pause between two bubbles
 MAX_CHARS = 200
 
 
+def clean_text(text):
+    """one line of printable text, at most MAX_CHARS long ("" if nothing usable): what any outside string becomes before display"""
+    return " ".join("".join(c if c.isprintable() else " " for c in str(text)).split())[:MAX_CHARS]
+
+
 def show_ms(text):
     """how long a message stays up: enough to read, never for long (it may sit over the user's work)"""
     return int(min(6000, 1800 + 55 * len(text)))
@@ -36,7 +41,7 @@ class BubbleQueue:
         self.cap, self.items, self.current = cap, deque(), None
 
     def push(self, text, urgent=False):
-        text = " ".join(str(text).split())[:MAX_CHARS]            # one line of whitespace-normalised text, length-limited
+        text = clean_text(text)
         if not text or text == self.current or text in self.items: return False
         if urgent: self.items.appendleft(text)
         else: self.items.append(text)

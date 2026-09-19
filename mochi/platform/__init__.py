@@ -7,7 +7,7 @@ from .base import Platform
 log = logging.getLogger("mochi")
 
 
-def detect(on_windows: Callable[[dict], None]) -> Platform:
+def detect(on_windows: Callable[[dict], None], pet=None) -> Platform:
     """Pick the window source for this desktop and enforce a single running instance (via the DBus name)."""
     if not sys.platform.startswith("linux"):
         return Platform(on_windows)
@@ -20,4 +20,4 @@ def detect(on_windows: Callable[[dict], None]) -> Platform:
         return Platform(on_windows)
     if not sb.registerService(SERVICE):
         sys.exit(f"mochi: already running ({SERVICE} is taken)")
-    return KdePlatform(on_windows, sb)
+    return KdePlatform(on_windows, sb, pet)

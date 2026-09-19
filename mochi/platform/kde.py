@@ -6,14 +6,15 @@ import time
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import ClassInfo, QObject, Slot
+from PySide6.QtCore import ClassInfo, Slot
 from PySide6.QtDBus import QDBusConnection, QDBusInterface, QDBusMessage
 from PySide6.QtWidgets import QApplication
 
+from ..api import PATH, SERVICE, Api
 from .base import Platform
 
 log = logging.getLogger("mochi")
-SERVICE, PATH, SCRIPT = "org.mochi.Pet", "/pet", "mochi"
+SCRIPT = "mochi"
 WARN_EVERY = 10.0                   # seconds between "bad payload" warnings: a noisy sender must not flood the log
 
 
@@ -38,10 +39,11 @@ _class_info: Any = ClassInfo                       # PySide6's type stubs declar
 
 
 @_class_info({"D-Bus Interface": SERVICE})
-class Bus(QObject):
-    """Receives window rects pushed by kwin.js (Wayland won't let a normal app list other windows)."""
-    def __init__(self, on_windows):
-        super().__init__()
+class Bus(Api):
+    """The pet's DBus object: the public API (see api.py) plus what kwin.js pushes at us (Wayland won't let a normal app list
+    other windows, so KWin does it for us)."""
+    def __init__(self, on_windows, pet=None):
+        super().__init__(pet)
         self.on_windows, self.last_warn, self.dropped = on_windows, -WARN_EVERY, 0
 
     @Slot(str)
@@ -58,9 +60,9 @@ class Bus(QObject):
 
 
 class KdePlatform(Platform):
-    def __init__(self, on_windows, sb):
+    def __init__(self, on_windows, sb, pet=None):
         super().__init__(on_windows)
-        self.sb, self.bus = sb, Bus(on_windows)
+        self.sb, self.bus = sb, Bus(on_windows, pet)
 
     def start(self):
         self.sb.registerObject(PATH, self.bus, QDBusConnection.ExportAllSlots)
