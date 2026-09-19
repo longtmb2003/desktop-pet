@@ -17,6 +17,7 @@ REST_VY = 150                       # a floor bounce slower than this doesn't ha
 # --- throwing: release velocity from the last few mouse samples ---------------------------------------------
 VEL_WINDOW = 0.12                   # only samples this recent (s) count: a mouse that stopped before release is a drop
 THROW_MIN, THROW_MAX = 350, 2600    # slower than THROW_MIN is a plain drop; faster than THROW_MAX is clamped
+SHAKE_WINDOW = 0.8                 # seconds of mouse history is_shake() gets to look at
 MIN_W = 80                          # narrower windows can't hold the pet: span() would be empty and it would jitter
 
 Wins = dict[Any, tuple[float, float, float, float]]     # id -> (x, y, w, h), ordered bottom -> top
@@ -74,13 +75,16 @@ def hop_target(wins, cx, feet, b):
 class DragTracker:
     """Release velocity of a dragged pet from the last few (time, x, y) mouse samples; times are monotonic seconds."""
     def __init__(self):
-        self.samples = deque(maxlen=8)
+        self.samples = deque(maxlen=8)          # for the release velocity
+        self.trail = deque()                    # the last SHAKE_WINDOW seconds, for shake detection
 
     def reset(self):
-        self.samples.clear()
+        self.samples.clear(); self.trail.clear()
 
     def add(self, t, x, y):
         self.samples.append((t, x, y))
+        self.trail.append((t, x, y))
+        while self.trail[0][0] < t - SHAKE_WINDOW: self.trail.popleft()
 
     def velocity(self, now):
         """(vx, vy) px/s over the last VEL_WINDOW, recent movement weighted more, clamped to THROW_MAX; (0, 0) if the mouse was still"""
@@ -125,3 +129,12 @@ def step_air(x, y, vx, vy, dt, floor, b):
             return Flight(x, floor, 0.0, 0.0, True, True, impact)
         y, vy, vx = floor, -vy * BOUNCE_Y, vx * FLOOR_FRICTION
     return Flight(x, y, vx, vy, False, hit, impact)
+
+
+def is_shake(trail, now):
+    """Is the mouse being shaken right now?
+
+    `trail` is the pointer history while the pet is held: [(t, x, y), ...] oldest first, monotonic seconds, pixels, covering the
+    last SHAKE_WINDOW seconds up to `now`. Return True for a vigorous back-and-forth, False for an ordinary drag or a flick."""
+    # TODO(human): decide what counts as a shake (direction reversals, minimum stroke length, speed...) and return True/False
+    return False

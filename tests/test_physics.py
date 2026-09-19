@@ -230,3 +230,20 @@ def test_a_free_fall_from_the_top_never_exceeds_terminal():
 
 def test_throw_threshold_constants_are_sane():
     assert 0 < THROW_MIN < THROW_MAX
+
+
+def test_trail_keeps_only_the_shake_window():
+    from mochi.physics import SHAKE_WINDOW
+    d = DragTracker()
+    for i in range(100): d.add(i * 0.05, i, 0)                          # 5 s of samples, 20 per second
+    assert d.trail[0][0] >= d.trail[-1][0] - SHAKE_WINDOW and len(d.trail) <= 20
+    assert len(d.samples) == 8                                          # the velocity buffer is independent
+    d.reset()
+    assert not d.trail and not d.samples
+
+
+def test_an_ordinary_drag_is_not_a_shake():
+    from mochi.physics import is_shake
+    trail = [(i * 0.01, i * 10, 0) for i in range(80)]                  # 1000 px/s in one direction for 0.8 s
+    assert is_shake(trail, 0.79) is False
+    assert is_shake([], 0.0) is False

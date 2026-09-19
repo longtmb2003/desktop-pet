@@ -26,7 +26,7 @@ class Pet(QWidget):
         self.facing, self.hearts = 1, []            # hearts: [x, y, life]
         self.wins, self.support, self.vx, self.grounded = {}, None, 0.0, False   # wins: id -> (x, y, w, h); support: id we stand on
         self.next_blink, self.moved, self.press, self.mask_key = 2.0, False, None, None
-        self.paused, self.drag = False, DragTracker()
+        self.paused, self.drag, self.shaken = False, DragTracker(), False
         self.cfg = settings or Settings()
         self.theme = self.cfg.theme
         g = self.screen_geo()
@@ -98,7 +98,7 @@ class Pet(QWidget):
         """let go of the pet: a fast enough mouse movement carries over as velocity, otherwise it just drops"""
         if math.hypot(vx, vy) < THROW_MIN: vx = vy = 0.0
         self.vx, self.vy = vx, vy
-        self.enter(State(Motion.AIRBORNE))
+        self.enter(State(Motion.AIRBORNE, self.state.expression))       # a shaken pet keeps its dizziness
 
     def land(self):
         """the pet came to rest on a surface: an AIRBORNE fall ends (a walker that hopped keeps walking)"""
@@ -152,6 +152,7 @@ class Pet(QWidget):
         g = e.globalPosition().toPoint()
         self.press, self.moved, self.off = g, False, g - self.pos()
         self.drag.reset(); self.drag.add(time.monotonic(), g.x(), g.y())
+        self.shaken = False
 
     def mouseMoveEvent(self, e):
         if self.press is None: return
@@ -161,7 +162,11 @@ class Pet(QWidget):
             self.support, self.vx = None, 0.0
             self.enter(State(Motion.DRAG))
         if self.moved:
-            self.drag.add(time.monotonic(), g.x(), g.y())
+            now = time.monotonic()
+            self.drag.add(now, g.x(), g.y())
+            if not self.shaken and physics.is_shake(self.drag.trail, now):
+                self.shaken = True
+                self.enter(State(Motion.DRAG, Expression.DIZZY))         # shaken silly; it stays dizzy after the release
             p = g - self.off
             self.px, self.py, self.vy = p.x(), p.y(), 0.0
             self.move(p)

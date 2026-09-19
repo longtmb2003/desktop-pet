@@ -253,3 +253,48 @@ def test_dizzy_sway_never_carries_the_pet_off_the_window(pet):
         for _ in range(int(3.4 / 0.033)):
             pet.tick()
             assert pet.support == "w" and pet.grounded, "staggered off the window"
+
+
+# ---- shaking ----------------------------------------------------------------------------------------------
+def held_and_moved(pet, monkeypatch):
+    """press on the pet and start dragging it; returns the mouse-event factory"""
+    import mochi.pet as mp
+    from PySide6.QtCore import QEvent, QPointF, Qt
+    from PySide6.QtGui import QMouseEvent
+    monkeypatch.setattr(mp.time, "monotonic", lambda: 50.0)
+
+    def ev(kind, x, y):
+        return QMouseEvent(kind, QPointF(x, y), QPointF(x, y), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
+    pet.mousePressEvent(ev(QEvent.MouseButtonPress, 100, 100))
+    return (lambda x, y: pet.mouseMoveEvent(ev(QEvent.MouseMove, x, y)),
+            lambda x, y: pet.mouseReleaseEvent(ev(QEvent.MouseButtonRelease, x, y)))
+
+
+def test_a_shake_makes_the_held_pet_dizzy_and_it_stays_dizzy_after_the_release(pet, monkeypatch):
+    move, release = held_and_moved(pet, monkeypatch)
+    monkeypatch.setattr("mochi.pet.physics.is_shake", lambda trail, now: True)
+    move(140, 100)
+    assert pet.state == State(Motion.DRAG, Expression.DIZZY) and pet.shaken
+    release(140, 100)
+    assert pet.state == State(Motion.AIRBORNE, Expression.DIZZY)
+    run_until(pet, lambda: pet.state.motion is Motion.WALK)
+    assert pet.state.expression is Expression.DIZZY                    # gets up staggering
+    run_until(pet, lambda: pet.state.expression is Expression.NORMAL)
+
+
+def test_a_normal_drag_and_release_is_not_dizzy(pet, monkeypatch):
+    move, release = held_and_moved(pet, monkeypatch)
+    move(140, 100); move(180, 100)
+    release(180, 100)
+    assert pet.state == State(Motion.AIRBORNE) and not pet.shaken
+
+
+def test_the_shake_reaction_fires_once_per_drag(pet, monkeypatch):
+    calls = []
+    move, release = held_and_moved(pet, monkeypatch)
+    monkeypatch.setattr("mochi.pet.physics.is_shake", lambda trail, now: calls.append(1) or True)
+    move(140, 100); move(100, 100); move(140, 100)
+    assert len(calls) == 1                                              # no re-triggering while already shaken
+    release(140, 100)
+    held_and_moved(pet, monkeypatch)                                    # pick it up again: reset
+    assert pet.shaken is False
