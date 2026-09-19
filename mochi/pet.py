@@ -9,8 +9,10 @@ from PySide6.QtGui import QCursor, QGuiApplication, QPainter, QTransform
 from PySide6.QtWidgets import QApplication, QMenu, QWidget
 
 from . import autostart, monitor, physics
+from . import reminders as rem
 from .bubble import SpeechBubble
 from .pomodoro import Pomodoro
+from .reminders_dialog import RemindersDialog
 from .pets import MOCHI, available
 from .physics import IMPACT_DIZZY, THROW_MIN, Bounds, DragTracker
 from .renderer import THEMES, paint, silhouette
@@ -45,6 +47,7 @@ class Pet(QWidget):
         self.px, self.py = random.uniform(g.left + 80, g.right - 240 * self.scale), g.top - 100
         self.enter(State(Motion.AIRBORNE))
         self.clock = QElapsedTimer(); self.clock.start()   # real frame time, see tick()
+        self.sched, self.rem_raw, self.pending, self.next_check = rem.Scheduler(rem.parse(self.cfg.reminders)), self.cfg.reminders, [], 0.0
         self.pomo, self.hot, self.cpu, self.read_cpu = Pomodoro(), False, monitor.Hysteresis(), monitor.cpu_percent
         self.mon_timer = QTimer(self, interval=monitor.POLL_MS, timeout=self.poll_cpu)
         self.last_touch, self.now_hour = -1e9, lambda: datetime.now().hour      # local time zone; tests replace now_hour
@@ -138,6 +141,7 @@ class Pet(QWidget):
                 if edge: self.facing = -edge                                # after shoving the edge, never walk straight back into it
             self.move(int(self.px), int(self.py))
         if self.pomo.active: self.pomodoro_event(self.pomo.poll())
+        if self.t >= self.next_check: self.next_check = self.t + 1.0; self.check_reminders()
         if self.t > self.next_chat:
             self.next_chat = self.t + random.uniform(120, 300)
             if self.state.motion in (Motion.IDLE, Motion.WALK): self.say(random.choice(self.defn.chatter), chatter=True)
@@ -154,9 +158,28 @@ class Pet(QWidget):
     def apply_settings(self):
         """a setting changed: bring the running pet in line (CPU watching, frame rate)"""
         self.sync_monitor()
+        if self.cfg.reminders != self.rem_raw:
+            self.rem_raw = self.cfg.reminders; self.sched.replace(rem.parse(self.rem_raw))
         pd = self.pets.get(self.cfg.pet, self.defn)
         if pd is not self.defn or self.cfg.scale != self.scale: self.change_pet(pd, self.cfg.scale)
         self.retune()
+
+    def check_reminders(self):
+        """once a second: say whatever reminders have come due (held back while a fullscreen app has Quiet Mode on)"""
+        self.pending += self.sched.due()
+        if self.pending and not (self.fullscreen and self.cfg.quiet_auto):
+            due, self.pending = self.pending, []
+            for r in due: self.remind(r)
+
+    def remind(self, r):
+        """say one reminder: a bubble that jumps the queue, a little hop to get attention, a chime unless quiet or muted"""
+        self.say(f"Nhắc: {r.text}", urgent=True)
+        if self.grounded and self.state.motion in (Motion.IDLE, Motion.WALK): self.vy = -320
+        if self.cfg.sound and not self.quiet: chime()
+
+    def open_reminders(self):
+        if getattr(self, "reminders_dialog", None) is None: self.reminders_dialog = RemindersDialog(self)
+        self.reminders_dialog.show(); self.reminders_dialog.raise_(); self.reminders_dialog.activateWindow()
 
     def open_settings(self):
         if getattr(self, "dialog", None) is None: self.dialog = SettingsDialog(self)
@@ -214,7 +237,8 @@ class Pet(QWidget):
 
     def closeEvent(self, e):
         self.bubble.close()
-        if getattr(self, "dialog", None) is not None: self.dialog.close()
+        for name in ("dialog", "reminders_dialog"):
+            if getattr(self, name, None) is not None: getattr(self, name).close()
         super().closeEvent(e)
 
     def throw(self, vx, vy):
@@ -345,6 +369,7 @@ class Pet(QWidget):
         if self.pomo.active: pm.addAction("Đặt lại", self.pomo.reset)
         a = m.addAction("Chế độ yên lặng"); a.setCheckable(True); a.setChecked(self.cfg.quiet)
         a.toggled.connect(lambda on: (setattr(self.cfg, "quiet", on), self.apply_settings()))
+        m.addAction("Nhắc việc...", self.open_reminders)
         m.addAction("Cài đặt...", self.open_settings)
         if len(self.pets) > 1:
             who = m.addMenu("Nhân vật")

@@ -54,6 +54,7 @@ class SettingsDialog(QDialog):
         form.addRow("Pomodoro: tập trung", self.focus)
         form.addRow("Pomodoro: nghỉ", self.rest)
 
+        rem_btn = QPushButton("Nhắc việc..."); rem_btn.clicked.connect(pet.open_reminders); lay.addWidget(rem_btn)
         back = QPushButton("Gọi Mochi về / đặt lại vị trí"); back.clicked.connect(pet.bring_back)
         lay.addWidget(back)
         self.back = back

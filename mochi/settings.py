@@ -49,5 +49,6 @@ class Settings:
     activity = _prop("activity", 1.0, 0.3, 3.0)         # how often it picks something to do (higher = fidgets more)
     scale = _prop("scale", 1.0, 0.6, 2.0)             # pet size multiplier
     pet = _prop("pet", "mochi")                       # which character (an id from pets.available())
+    reminders = _prop("reminders", "")                   # JSON text, see reminders.py
     focus_min = _prop("focus_min", 25, 1, 180)          # Pomodoro focus length
     break_min = _prop("break_min", 5, 1, 60)            # Pomodoro break length
