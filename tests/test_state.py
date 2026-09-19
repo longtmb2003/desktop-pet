@@ -52,3 +52,14 @@ def test_after_ordinary_state_changes_behaviour():
 def test_ends_at():
     assert ends_at(State(Motion.DRAG), 5.0) == math.inf
     assert all(7.0 <= ends_at(State(), 5.0, RNG) <= 10.0 for _ in range(50))
+
+
+def test_dizzy_lasts_a_few_seconds_then_returns_to_normal():
+    assert duration(State(Motion.WALK, Expression.DIZZY)) == (3.5, 3.5)
+    assert after(State(Motion.WALK, Expression.DIZZY), RNG) == State()
+
+
+def test_airborne_and_drag_never_time_out_even_when_dizzy():
+    assert duration(State(Motion.AIRBORNE, Expression.DIZZY)) is None
+    assert duration(State(Motion.DRAG, Expression.DIZZY)) is None
+    assert ends_at(State(Motion.AIRBORNE, Expression.DIZZY), 3.0) == math.inf

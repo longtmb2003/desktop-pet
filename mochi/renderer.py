@@ -23,6 +23,15 @@ def heart(s):
     return p
 
 
+def star(r):
+    p = QPainterPath()
+    for i in range(10):
+        a, rr = -math.pi / 2 + i * math.pi / 5, r if i % 2 == 0 else r * .45
+        p.lineTo(rr * math.cos(a), rr * math.sin(a)) if i else p.moveTo(rr * math.cos(a), rr * math.sin(a))
+    p.closeSubpath()
+    return p
+
+
 def silhouette(f, sleep, stretch, hearts):
     """Region of the pet window that should catch clicks; the rest is click-through. f = -facing."""
     c = S // 2
@@ -43,6 +52,7 @@ def paint(pet, p):
     t, state = pet.t, pet.state
     motion, act = state.motion, state.action
     happy, sleep, drag = state.expression is Expression.HAPPY, motion is Motion.SLEEP, motion is Motion.DRAG
+    dizzy = state.expression is Expression.DIZZY
     walking = motion is Motion.WALK and act is Action.NONE          # a chase runs, it doesn't use the walk cycle
     up = motion in (Motion.AIRBORNE, Motion.DRAG)
     th = THEMES[pet.theme]
@@ -101,7 +111,9 @@ def paint(pet, p):
     lx, ly = max(-1, min(1, cur.x() / 250)) * -2.5 * pet.facing, max(-1, min(1, cur.y() / 250)) * 1.5
     pen = QPen(DARK, 3, Qt.SolidLine, Qt.RoundCap)
     for x in (-19, 19):
-        if sleep or act in (Action.YAWN, Action.STRETCH, Action.GROOM) or pet.blink > 0:
+        if dizzy:                                                          # X eyes
+            arc = QPainterPath(QPointF(x - 6, -52)); arc.lineTo(x + 6, -40); arc.moveTo(x + 6, -52); arc.lineTo(x - 6, -40)
+        elif sleep or act in (Action.YAWN, Action.STRETCH, Action.GROOM) or pet.blink > 0:
             arc = QPainterPath(QPointF(x - 7, -46)); arc.quadTo(x, -40, x + 7, -46)
         elif happy:
             arc = QPainterPath(QPointF(x - 7, -43)); arc.quadTo(x, -53, x + 7, -43)
@@ -113,6 +125,7 @@ def paint(pet, p):
         p.setPen(pen); p.setBrush(Qt.NoBrush); p.drawPath(arc)
     if drag: blob(DARK, 0, -35, 3, 4)
     elif happy: blob(PINK.darker(130), 0, -35, 4, 4.5)
+    elif dizzy: blob(PINK.darker(150), 0, -34, 3.5, 3)
     elif act is Action.YAWN: blob(PINK.darker(150), 0, -33, 4 + 3 * o, 2 + 8 * o)
     else:
         mouth = QPainterPath(QPointF(-5, -38)); mouth.quadTo(-2.5, -33, 0, -38); mouth.quadTo(2.5, -33, 5, -38)
@@ -132,6 +145,11 @@ def paint(pet, p):
             f.setPointSizeF(9 + ph * 7); p.setFont(f)
             p.setPen(QColor(122, 134, 201, int(math.sin(ph * math.pi) * 230)))
             p.drawText(QPointF(34 + ph * 22, -84 - ph * 30), "z")
+    if dizzy:                                                          # stars circling the head
+        p.setPen(Qt.NoPen); p.setBrush(QColor("#ffcf5a"))
+        for i in range(3):
+            a = t * 5 + i * 2.094
+            p.save(); p.translate(34 * math.cos(a), -104 + 9 * math.sin(a)); p.rotate(t * 90); p.drawPath(star(5)); p.restore()
     for x, y, life in pet.hearts:
         p.setPen(Qt.NoPen); p.setBrush(QColor(255, 111, 145, int(min(1, life) * 230)))
         p.save(); p.translate(x, y); p.drawPath(heart(5 + 3 * math.sin(life * 6))); p.restore()

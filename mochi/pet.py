@@ -8,7 +8,7 @@ from PySide6.QtGui import QCursor, QGuiApplication, QPainter
 from PySide6.QtWidgets import QApplication, QMenu, QWidget
 
 from . import autostart, physics
-from .physics import FEET, S, THROW_MIN, WALK_SPEED, Bounds, DragTracker
+from .physics import FEET, IMPACT_DIZZY, S, THROW_MIN, WALK_SPEED, Bounds, DragTracker
 from .renderer import THEMES, paint, silhouette
 from .settings import Settings
 from .state import Action, Expression, Motion, State, after, ends_at
@@ -73,6 +73,8 @@ class Pet(QWidget):
                 f = physics.step_air(self.px, self.py, self.vx, self.vy, dt, floor, g)
                 self.px, self.py, self.vx, self.vy = f.x, f.y, f.vx, f.vy
                 if f.hit: self.squash = 0.3
+                if f.impact >= IMPACT_DIZZY and self.state.motion is Motion.AIRBORNE and self.state.expression is Expression.NORMAL:
+                    self.enter(State(Motion.AIRBORNE, Expression.DIZZY))
                 if f.landed:
                     self.support, self.grounded = wid, True
                     self.land()
@@ -101,7 +103,8 @@ class Pet(QWidget):
     def land(self):
         """the pet came to rest on a surface: an AIRBORNE fall ends (a walker that hopped keeps walking)"""
         if self.state.motion is Motion.AIRBORNE:
-            self.enter(State())
+            dizzy = self.state.expression is Expression.DIZZY            # a hard landing: get up and stagger about
+            self.enter(State(Motion.WALK, Expression.DIZZY) if dizzy else State())
 
     def chase(self, dt, g, cx, wid):
         lo, hi = physics.span(self.wins, g, wid)
@@ -113,14 +116,18 @@ class Pet(QWidget):
         self.px += self.facing * 2 * WALK_SPEED * dt
 
     def walk(self, dt, g, cx, wid):
+        dizzy = self.state.expression is Expression.DIZZY
         step = self.facing * WALK_SPEED * dt
+        if dizzy:                                                                # half speed, swaying, changing its mind
+            step = step / 2 + math.sin(self.t * 7) * 40 * dt
+            if random.random() < 0.02: self.facing = -self.facing
         self.px += step; cx += step
         lo, hi = physics.span(self.wins, g, wid)
-        if wid is None and random.random() < 0.004:                              # on the floor: sometimes hop onto a nearby window
+        if wid is None and not dizzy and random.random() < 0.004:                              # floor: sometimes hop onto a window
             self.hop_to(cx, self.py + FEET, g)
         if cx < lo or cx > hi:
             out = -1 if cx < lo else 1
-            if wid is not None and random.random() < 0.4:          # hop off the window edge
+            if wid is not None and not dizzy and random.random() < 0.4:      # hop off the window edge
                 self.facing, self.vx, self.vy, self.support = out, out * 140, -260, None
             else:
                 self.facing = -out

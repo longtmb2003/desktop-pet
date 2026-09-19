@@ -12,6 +12,7 @@ WALL_PAD = 40                       # how far the window may overhang the screen
 HEAD_ROOM = 40                      # window-y of the top of the ears: the ceiling is b.top - HEAD_ROOM
 BOUNCE_X, BOUNCE_Y = 0.55, 0.35     # fraction of normal speed kept after hitting a wall / ceiling / floor
 FLOOR_FRICTION = 0.7                # sideways speed kept per floor bounce
+IMPACT_DIZZY = 2000               # a hit harder than this (px/s, normal component) leaves the pet dizzy; free falls stay below it
 REST_VY = 150                       # a floor bounce slower than this doesn't happen: the pet just settles
 # --- throwing: release velocity from the last few mouse samples ---------------------------------------------
 VEL_WINDOW = 0.12                   # only samples this recent (s) count: a mouse that stopped before release is a drop

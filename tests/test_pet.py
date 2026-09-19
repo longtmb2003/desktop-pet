@@ -131,12 +131,22 @@ def test_throw_above_threshold_keeps_velocity(pet):
 
 def test_thrown_pet_stays_on_screen_and_settles(pet):
     g = pet.screen_geo()
-    in_air(pet, g.left + 100, g.top + 100, 2600, -300)
+    in_air(pet, g.left + 100, g.top + 100, 1200, -300)                  # a firm throw, below the dizzy threshold
     for _ in range(2400):
         pet.tick()
         assert g.left - WALL_PAD <= pet.px <= g.right - S + WALL_PAD
         if pet.state.motion is not Motion.AIRBORNE: break
     assert pet.state.motion is Motion.IDLE and pet.py == floor_y(pet) and (pet.vx, pet.vy) == (0.0, 0.0)
+
+
+def test_the_hardest_throw_stays_on_screen_and_lands_dizzy(pet):
+    g = pet.screen_geo()
+    in_air(pet, g.left + 100, g.top + 100, 2600, -300)
+    for _ in range(2400):
+        pet.tick()
+        assert g.left - WALL_PAD <= pet.px <= g.right - S + WALL_PAD
+        if pet.state.motion is not Motion.AIRBORNE: break
+    assert pet.state == State(Motion.WALK, Expression.DIZZY) and pet.py == floor_y(pet)
 
 
 def test_pet_thrown_sideways_along_the_floor_still_lands(pet):
@@ -167,3 +177,79 @@ def test_release_uses_the_drag_history(pet, monkeypatch):
         pet.mouseMoveEvent(ev(QEvent.MouseMove, 100 + 20 * i, 100))
     pet.mouseReleaseEvent(ev(QEvent.MouseButtonRelease, 200, 100))
     assert pet.state.motion is Motion.AIRBORNE and pet.vx == pytest.approx(1000) and pet.vy == pytest.approx(0)
+
+
+# ---- dizzy ------------------------------------------------------------------------------------------------
+from mochi.physics import IMPACT_DIZZY  # noqa: E402
+from mochi.state import Expression  # noqa: E402
+
+
+def run_until(pet, cond, frames=3000):
+    for i in range(frames):
+        pet.tick()
+        if cond(): return i
+    raise AssertionError("condition never met")
+
+
+def test_a_hard_throw_into_a_wall_makes_the_pet_dizzy_and_it_recovers(pet):
+    g = pet.screen_geo()
+    in_air(pet, g.left + 300, g.top + 200, 2600, 0)
+    assert IMPACT_DIZZY < 2600
+    run_until(pet, lambda: pet.state.expression is Expression.DIZZY)          # hit the right wall
+    assert pet.state.motion is Motion.AIRBORNE                                 # dizzy while still in the air: independent axes
+    run_until(pet, lambda: pet.state.motion is Motion.WALK)                    # lands, gets up and staggers
+    assert pet.state.expression is Expression.DIZZY and pet.grounded
+    run_until(pet, lambda: pet.state.expression is Expression.NORMAL)
+    assert pet.state == State() and pet.t > 3                                  # ~3.5 s later it is back to normal
+
+
+def test_gentle_throws_and_normal_falls_do_not_make_it_dizzy(pet):
+    g = pet.screen_geo()
+    for vx, vy in [(0, 0), (500, -200), (900, 0), (-700, -300)]:
+        in_air(pet, g.left + 300, g.top - 100, vx, vy)
+        pet.enter(State(Motion.AIRBORNE))
+        for _ in range(3000):
+            pet.tick()
+            assert pet.state.expression is Expression.NORMAL, (vx, vy)
+            if pet.state.motion is not Motion.AIRBORNE: break
+
+
+def test_a_fall_from_the_very_top_is_below_the_dizzy_threshold(pet):
+    g = pet.screen_geo()
+    in_air(pet, g.left + 300, g.top - 100, 0, 0)
+    peak = 0.0
+    for _ in range(3000):
+        pet.tick(); peak = max(peak, pet.vy)
+        if pet.state.motion is not Motion.AIRBORNE: break
+    assert peak < IMPACT_DIZZY
+
+
+def dizzy_on_a_window(pet):
+    g = pet.screen_geo()
+    top, x, w = g.top + 300, g.left + 100, 300
+    pet.wins = {"w": (x, top, w, 200)}
+    pet.px, pet.py, pet.support, pet.vx, pet.vy = x + w - 36 - S / 2, top - FEET, "w", 0.0, 0.0    # just inside the right edge
+    pet.enter(State(Motion.WALK, Expression.DIZZY))
+    pet.facing = 1
+
+
+def test_dizzy_walker_turns_back_at_a_window_edge_instead_of_hopping_off(pet, monkeypatch):
+    import mochi.pet as mp
+    dizzy_on_a_window(pet)
+    monkeypatch.setattr(mp.random, "random", lambda: 0.0)                       # would always hop for a healthy walker
+    for _ in range(120):
+        pet.tick()
+        assert pet.support == "w" and pet.vx == 0.0, "a dizzy pet must not jump off"
+
+
+def test_dizzy_sway_never_carries_the_pet_off_the_window(pet):
+    """the sway is about +-6 px against a 10 px margin between the walking range and the window edge (measured: 0 falls in 600 runs)"""
+    import random
+    random.seed(3)
+    g = pet.screen_geo()
+    for _ in range(20):                                                        # many staggers, each lasting the full 3.5 s
+        dizzy_on_a_window(pet)
+        pet.px = g.left + 100 + random.uniform(60, 240) - S / 2                # anywhere along the window top
+        for _ in range(int(3.4 / 0.033)):
+            pet.tick()
+            assert pet.support == "w" and pet.grounded, "staggered off the window"
