@@ -33,3 +33,14 @@ def test_bad_payload_warnings_are_rate_limited(caplog):
         for _ in range(50):
             bus.windows("garbage")
     assert len(caplog.records) == 1 and bus.dropped == 49
+
+
+def test_hostile_numbers_are_skipped_not_fatal():
+    assert parse_windows('[["a",1,2,3,' + "9" * 400 + '],["ok",1,2,3,4]]') == {"ok": (1, 2, 3, 4)}   # int too large for float
+
+
+@pytest.mark.parametrize("payload", ["[" * 200000 + "]" * 200000, "[" * 200000, '["' + "x" * 10_000_000 + '"]'])
+def test_bus_never_raises_on_hostile_json(payload):
+    got = []
+    Bus(got.append).windows(payload)                          # deep nesting can raise RecursionError on older Pythons
+    assert all(isinstance(w, dict) for w in got)
