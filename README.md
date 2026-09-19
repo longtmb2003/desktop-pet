@@ -1,7 +1,6 @@
 # desktop-pet
 
-**Mochi** — một pet desktop nhỏ, nhẹ, vẽ hoàn toàn bằng vector (không cần sprite). Ý tưởng giống [Shimeji](https://github.com/ngoc-thu/shimeji-ubuntu) nhưng gọn hơn: một file Python, không Java.
-
+**Mochi** — một pet desktop nhỏ, nhẹ, vẽ hoàn toàn bằng vector (không cần sprite).
 ## Tính năng
 
 - Đi lại, ngồi, ngủ (có Zzz), chớp mắt, mắt nhìn theo con trỏ chuột
