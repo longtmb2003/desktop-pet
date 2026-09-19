@@ -286,3 +286,63 @@ def test_the_sign_sways_from_side_to_side(make, tmp_path):
               if (c := img.pixelColor(x, y)).alpha() > 200 and c.red() > 170 and c.green() < 70 and c.blue() < 80]
         return sum(xs) / len(xs)
     assert abs(red_x(0.5236) - red_x(1.5708)) > 1.5                      # 3t = pi/2 and 3pi/2: the two ends of the swing
+
+
+# ---- the arm stays joined to the body --------------------------------------------------------------------------------------
+@pytest.mark.parametrize("who", ["synthetic", "hanhan"])
+def test_a_swinging_arm_is_never_cut_off_from_the_body(make, tmp_path, who, monkeypatch):
+    """the picture is one piece: a gap between shoulder and sleeve would leave the arm floating as a piece of its own"""
+    from conftest import HANHAN, components
+    if who == "hanhan":
+        if not (HANHAN / "pack.json").exists(): pytest.skip("no local Hà Nhân pack")
+        p = make("hanhan", 1.0, {"mochi": MOCHI, "hanhan": load_dir(HANHAN)})
+    else:
+        p = make_pet(make, tmp_path)
+    p.grounded, p.hot, p.squash, p.hearts, p.dur, p.began = True, False, 0.0, [], 4.0, 10.0
+    from PySide6.QtCore import QPoint as P
+    for pointer in ((500, 0), (-400, 100), (300, -200), (20, 400)):                    # the pointer in all directions
+        monkeypatch.setattr(sp.QCursor, "pos", staticmethod(lambda pointer=pointer: p.pos() + P(*pointer)))
+        for action in (Action.POINT, Action.WAG, Action.LECTURE, Action.WORK):
+            for facing in (1, -1):
+                for k in range(10):
+                    p.state, p.facing, p.drawn_facing, p.t = State(action=action), facing, facing, 10.0 + k * 0.11
+                    n = components(render(p))
+                    assert n == 1, f"{who} {action.name} facing={facing} pointer={pointer} phase={k}: {n} separate pieces"
+
+
+def test_a_pack_says_where_its_arms_are_rooted_and_bad_values_are_refused(qapp, tmp_path):
+    import json
+    d = load_dir(write_pack(tmp_path / "s", id="s", shoulders={"left": [4, 20], "right": [30, 20]}))
+    assert d.pack.shoulders == {"left": (4.0, 20.0), "right": (30.0, 20.0)}
+    assert load_dir(write_pack(tmp_path / "n", id="n")).pack.shoulders == {}                            # none given: a guess is used
+    for bad, why in (({"left": [1, 2]}, "shoulders needs"), ({"left": [1], "right": [2, 3]}, "must be"), ("chest", "shoulders needs"),
+                     ({"left": [999, 2], "right": [1, 2]}, "shoulders.left"), ({"left": [1, "x"], "right": [1, 2]}, "shoulders.left")):
+        root = write_pack(tmp_path / "b", id="b")
+        j = json.loads((root / "pack.json").read_text()); j["shoulders"] = bad
+        (root / "pack.json").write_text(json.dumps(j))
+        with pytest.raises(ValueError, match=why):
+            load_dir(root)
+
+
+def test_the_arm_is_rooted_at_the_packs_shoulder_point(make, tmp_path):
+    p, pk = sign_pet(make, tmp_path)
+    bs = 150 / pk.body.height()
+    bw = pk.body.width() * bs
+    assert sp.shoulder(pk, -1, bs, bw, 150).x() == pytest.approx(-0.27 * bw)                  # no point given: on the chest
+    pk.shoulders = {"left": (10.0, 30.0), "right": (30.0, 32.0)}
+    left, right = sp.shoulder(pk, -1, bs, bw, 150), sp.shoulder(pk, 1, bs, bw, 150)
+    assert left.x() == pytest.approx(10 * bs - bw / 2) and left.y() == pytest.approx(30 * bs - 150)
+    assert right.x() == pytest.approx(30 * bs - bw / 2) and right.y() == pytest.approx(32 * bs - 150)
+
+
+def test_the_raised_finger_is_on_the_same_side_of_the_screen_whichever_way_it_faces(make, tmp_path):
+    """turning round mirrors the body but not the arm that is raised: it stays on the screen's right (an arm on the wrong side
+    would move to the other half of the picture, changing how much coat there is on each side)"""
+    sides = {}
+    for facing in (1, -1):
+        p = make_pet(make, tmp_path)
+        p.state, p.facing, p.drawn_facing, p.t, p.dur = State(action=Action.WAG), facing, facing, 10.35, 4.0
+        img = render(p)
+        is_coat, mid = (lambda c, rgb=p.defn.pack.coat.rgb(): c.rgb() == rgb), p.size // 2
+        sides[facing] = (count(img, (mid + 28, 0, p.size, p.size), is_coat), count(img, (0, 0, mid - 28, p.size), is_coat))
+    assert abs(sides[1][0] - sides[-1][0]) < 25 and abs(sides[1][1] - sides[-1][1]) < 25

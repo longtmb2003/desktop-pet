@@ -43,15 +43,22 @@ def vector_face(p, s, kind, box):
 RED = QColor(206, 32, 41)
 
 
-def draw_prop(p, pk, bw, bh, t, mirror):
+def shoulder(pk, side, bs, bw, bh):
+    """where the arm on art side `side` (-1 left, +1 right) is rooted, in the body's drawing units (origin at the feet)"""
+    pt = pk.shoulders.get("left" if side < 0 else "right")
+    return QPointF(pt[0] * bs - bw / 2, pt[1] * bs - bh) if pt else QPointF(side * bw * 0.27, -bh * 0.53)
+
+
+def draw_prop(p, pk, bw, bh, bs, t, mirror):
     """what it holds while working: a red "no entry, busy" sign on a handle, or a laptop. Both hands take hold of it and the arms
     come straight from the shoulders, so it is clearly gripped rather than floating in front of the body"""
-    sx, sy0, aw = bw * 0.27, -bh * 0.53, bw * 0.17                                     # shoulders (on the chest), the sleeve width there
+    aw = bw * 0.17                                                                    # the sleeve's width at the shoulder
     l1, l2, hsz = bw * 0.32, bw * 0.30, bw * 0.0085
     if pk.work_prop == "sign":
         cy, r = -bh * 0.44, bw * 0.31                                                 # the disc's centre and radius
         grip = QPointF(0, cy + r + 14)                                                # both fists close round the handle, under the sign
-        held = [draw_arm(p, pk.coat, QPointF(side * sx, sy0), QPointF(side * 7, grip.y()), aw, "grip", l1, l2, hsz) for side in (-1, 1)]
+        held = [draw_arm(p, pk.coat, shoulder(pk, side, bs, bw, bh), QPointF(side * 7, grip.y()), aw, "grip", l1, l2, hsz)
+                for side in (-1, 1)]
         p.save(); p.translate(grip); p.rotate(math.sin(t * 3) * 4); p.translate(-grip)   # the sign sways a little: "not now!"
         p.setPen(QPen(QColor(90, 60, 32), 1.2)); p.setBrush(QColor(150, 104, 58))
         p.drawRoundedRect(QRectF(-3, cy + r - 6, 6, 44), 2, 2)                        # the handle
@@ -75,7 +82,7 @@ def draw_prop(p, pk, bw, bh, t, mirror):
         p.drawRoundedRect(QRectF(-bw * 0.28, top, bw * 0.56, bh * 0.16), 4, 4)
         p.setPen(Qt.NoPen); p.setBrush(QColor(236, 240, 246)); p.drawEllipse(QPointF(0, top + bh * 0.08), 3, 3)
         for side in (-1, 1):
-            draw_arm(p, pk.coat, QPointF(side * sx, sy0), QPointF(side * bw * 0.30, top + bh * 0.08), aw, "grip", l1, l2, hsz)
+            draw_arm(p, pk.coat, shoulder(pk, side, bs, bw, bh), QPointF(side * bw * 0.30, top + bh * 0.08), aw, "grip", l1, l2, hsz)
 
 
 def riding(pet):
@@ -144,29 +151,32 @@ def cursor(pet):
     return c.x() / pet.scale - pet.defn.size / 2, c.y() / pet.scale - pet.defn.feet
 
 
-def draw_scold(p, pk, bw, bh, t, action, pet, dx, dy):
-    """the arm(s) of a scolding character, drawn upright (after the body's own transform): jabbing at the pointer, wagging a raised
-    finger, or gesturing left and right with open hands"""
-    sx, sy0, aw = bw * 0.28, -bh * 0.53 - dy, bw * 0.26
-    l1, l2, hsz = bw * 0.32, bw * 0.30, bw * 0.0085                                     # segment lengths, and the hand's size (~19 px)
+def draw_scold(p, pk, bw, bh, bs, t, action, pet, mir):
+    """the arm(s) of a scolding character, drawn in the body's own space (so they move, lean and turn with it, and stay rooted at the
+    shoulders): jabbing at the pointer, wagging a raised finger, or gesturing left and right with open hands"""
+    aw, l1, hsz = bw * 0.26, bw * 0.32, bw * 0.0085
+    l2 = bw * 0.30
     full = l1 + l2 - 1                                                                # the arm stretched out straight
     if action is Action.POINT:
-        cx, cy = cursor(pet)
-        side = 1 if cx >= 0 else -1
-        sh = QPointF(side * sx + dx, sy0)
-        ang = math.atan2(cy - sh.y(), cx - sh.x())
+        side = 1 if (cursor(pet)[0] >= 0) == (mir >= 0) else -1                       # the art's arm on the pointer's side
+        sh = shoulder(pk, side, bs, bw, bh)
+        inv, _ = p.worldTransform().inverted()
+        c = QCursor.pos() - pet.pos()
+        target = inv.map(QPointF(c.x(), c.y()))                                       # the pointer, in the body's own space
+        ang = math.atan2(target.y() - sh.y(), target.x() - sh.x())
         jab = full - 2 + 3 * math.sin(t * 12)
         draw_arm(p, pk.coat, sh, sh + QPointF(math.cos(ang), math.sin(ang)) * jab, aw, "point", l1, l2, hsz)
     elif action is Action.WAG:
-        sh = QPointF(sx + dx, sy0)
+        side = 1 if mir >= 0 else -1                                                  # the arm on the screen's right
+        sh = shoulder(pk, side, bs, bw, bh)
         a = math.radians(-78 + 20 * math.sin(t * 9))                                  # forearm up, wagging side to side: "no, no, no"
-        elbow = sh + QPointF(math.cos(math.radians(-15)), math.sin(math.radians(-15))) * l1 * 0.9 + QPointF(0, l1 * 0.55)
-        tip = elbow + QPointF(math.cos(a), math.sin(a)) * l2
+        elbow = sh + QPointF(side * math.cos(math.radians(-15)), math.sin(math.radians(-15))) * l1 * 0.9 + QPointF(0, l1 * 0.55)
+        tip = elbow + QPointF(side * math.cos(a), math.sin(a)) * l2
         draw_arm(p, pk.coat, sh, tip, aw, "point", l1, l2, hsz)
     else:
         for side, phase in ((1, 0.0), (-1, math.pi)):                                 # both arms, alternately flung out
             a = math.radians(-20 + 25 * math.sin(t * 6 + phase))
-            sh = QPointF(side * sx + dx, sy0)
+            sh = shoulder(pk, side, bs, bw, bh)
             draw_arm(p, pk.coat, sh, sh + QPointF(side * math.cos(a), math.sin(a)) * full * 0.85, aw, "open", l1, l2, hsz)
 
 
@@ -237,9 +247,9 @@ def paint_sprite(pet, p):
             kind = face_kind(pet)
             p.drawImage(QRectF(bx, by, fw, fh), pk.face(kind, t))
         p.restore()
-        if s.action is Action.WORK: draw_prop(p, pk, bw, bh, t, 1 if mir >= 0 else -1)
+        if s.action is Action.WORK: draw_prop(p, pk, bw, bh, bs, t, 1 if mir >= 0 else -1)
+        if s.action in SCOLDING: draw_scold(p, pk, bw, bh, bs, t, s.action, pet, mir)
     p.resetTransform(); p.scale(pet.scale, pet.scale); p.translate(d.size / 2, d.feet)    # extras: upright, not turned with the body
-    if s.action in SCOLDING: draw_scold(p, pk, bw, bh, t, s.action, pet, dx, dy)
     if on_wheels: draw_ride_effects(p, pet, bw, bh, t)
     if lying:
         f = p.font(); f.setBold(True)

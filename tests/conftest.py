@@ -134,3 +134,21 @@ def render(p):
     return img
 
 
+
+
+def components(img, alpha=100):
+    """how many separate pieces of opaque-ish picture `img` holds (4-connected); a floating arm or hand is a piece of its own"""
+    w, h = img.width(), img.height()
+    a = bytes(img.constBits())[3::4]
+    solid = bytearray(1 if v > alpha else 0 for v in a)
+    seen, count = bytearray(w * h), 0
+    for start in range(w * h):
+        if not solid[start] or seen[start]: continue
+        count += 1
+        stack = [start]; seen[start] = 1
+        while stack:
+            i = stack.pop()
+            x, y = i % w, i // w
+            for j in ((i - 1) if x else -1, (i + 1) if x < w - 1 else -1, (i - w) if y else -1, (i + w) if y < h - 1 else -1):
+                if j >= 0 and solid[j] and not seen[j]: seen[j] = 1; stack.append(j)
+    return count

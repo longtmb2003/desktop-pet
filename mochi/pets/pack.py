@@ -24,6 +24,8 @@ pack.json (all lengths in window pixels at scale 1, image coordinates in pixels 
                    rides this picture (looking the same way as body.png), `speed` times as fast, spinning the wheels (each wheel:
                    x, y, rx, ry of the tyre, rim_x, rim_y, rim_rx, rim_ry of the rim, hub [x, y], avoid [[x, y], ...] a shape over the
                    rim to leave alone), and now and then calling out one of `lines`
+  shoulders        {"left": [x, y], "right": [x, y]}: where a drawn arm is rooted, in body.png pixels, a little inside the torso's edge so
+                   sleeve and body overlap (no gap). Default: a guess on the chest
   work_prop        what it holds while working (Pomodoro): "laptop" (default) or "sign", a red no-entry "BẬN" (busy) sign
 """
 import json
@@ -63,6 +65,7 @@ class SpritePack:
     fps: dict = field(default_factory=dict)
     sway: float = 4.0
     bob: float = 4.0
+    shoulders: dict = field(default_factory=dict)  # "left" / "right" -> (x, y) in body pixels; empty: guess
     free: dict = field(default_factory=dict)      # arm-free bodies: "left" / "right" / "both" -> QImage (empty: none)
     ride: "Ride | None" = None                   # the tricycle, if it has one
     masks: dict = field(default_factory=dict)     # cache: (scale, facing) -> exact outline region
@@ -140,6 +143,18 @@ def load_ride(root, j):
     return Ride(image, height, speed, tuple(wheels), lines)
 
 
+def load_shoulders(j, body):
+    sj = j.get("shoulders")
+    if sj is None: return {}
+    if not isinstance(sj, dict) or set(sj) != {"left", "right"}: raise ValueError('shoulders needs "left" and "right"')
+    out = {}
+    for k, pt in sj.items():
+        if not (isinstance(pt, list) and len(pt) == 2): raise ValueError(f"shoulders.{k} must be [x, y]")
+        x, y = _num(pt[0], f"shoulders.{k}", 0, body.width()), _num(pt[1], f"shoulders.{k}", 0, body.height())
+        out[k] = (x, y)
+    return out
+
+
 def coat_color(body):
     """the colour of the clothing at the upper arm (an opaque pixel about a quarter of the way in, 60% of the way down), for sleeves"""
     w, h = body.width(), body.height()
@@ -189,7 +204,8 @@ def load_dir(root):
     if looks not in ("left", "right"): raise ValueError(f"looks must be left or right, got {looks!r}")
     turn = _num(j.get("turn", 0.25), "turn", 0, 2)
     pack = SpritePack(body, height, (bx, by, bw, bh), faces, fps, sway, bob, art=-1 if looks == "left" else 1, work_prop=prop,
-                      coat=coat_color(body), free=load_free(root, j, body), ride=load_ride(root, j))
+                      coat=coat_color(body), free=load_free(root, j, body), ride=load_ride(root, j),
+                      shoulders=load_shoulders(j, body))
     scold = tuple(c for c in (clean_text(x)[:80] for x in (j.get("scold") or [])[:30] if isinstance(x, str)) if c)
     text = {k: clean_text(j.get(k) or "")[:80] or dflt for k, dflt in (("drop", PetDef.drop), ("desktop_remark", PetDef.desktop_remark))}
     return PetDef(pid, name, "sprite", size, feet, feet - int(height), _num(j.get("walk_speed", 45), "walk_speed", 5, 400), weights,

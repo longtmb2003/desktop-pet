@@ -11,6 +11,16 @@
   "right": "free_right.png",
   "both": "free_both.png"
  },
+ "shoulders": {
+  "left": [
+   158,
+   372
+  ],
+  "right": [
+   326,
+   366
+  ]
+ },
  "ride": {
   "image": "ride.png",
   "height": 170,
