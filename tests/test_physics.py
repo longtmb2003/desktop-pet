@@ -247,3 +247,34 @@ def test_an_ordinary_drag_is_not_a_shake():
     trail = [(i * 0.01, i * 10, 0) for i in range(80)]                  # 1000 px/s in one direction for 0.8 s
     assert is_shake(trail, 0.79) is False
     assert is_shake([], 0.0) is False
+
+
+def _wiggle(amp, period, dur=0.8, dt=0.01, axis=0):
+    """Triangle wave of amplitude `amp` px peak-to-peak and `period` s, as a trail"""
+    out = []
+    for i in range(int(dur / dt)):
+        t = i * dt; ph = (t / period) % 1.0
+        d = amp * (2 * ph if ph < 0.5 else 2 - 2 * ph)
+        out.append((t, d if axis == 0 else 0, d if axis == 1 else 0))
+    return out
+
+
+def test_a_vigorous_back_and_forth_is_a_shake():
+    from mochi.physics import is_shake
+    assert is_shake(_wiggle(120, 0.2), 0.79) is True                    # 5 Hz, 120 px strokes: ~1200 px/s
+    assert is_shake(_wiggle(120, 0.2, axis=1), 0.79) is True            # vertical works too
+
+
+def test_tremor_and_lazy_wiggles_are_not_shakes():
+    from mochi.physics import is_shake
+    assert is_shake(_wiggle(15, 0.04, dt=0.005), 0.79) is False         # ~750 px/s and many reversals, but 15 px strokes
+    assert is_shake(_wiggle(120, 0.8), 0.79) is False                   # big but only ~1 reversal
+    assert is_shake(_wiggle(45, 0.2), 0.79) is False                    # strokes reach 40 px but 450 px/s is too slow
+
+
+def test_a_single_turn_or_a_flick_is_not_a_shake():
+    from mochi.physics import is_shake
+    there_and_back = [(i * 0.01, (i * 30 if i < 40 else (80 - i) * 30), 0) for i in range(80)]
+    assert is_shake(there_and_back, 0.79) is False                      # fast, long, but one reversal
+    assert is_shake([(0.0, 0, 0)], 0.0) is False                        # a single sample
+    assert is_shake([(0.5, 0, 0), (0.5, 90, 0)], 0.5) is False          # zero elapsed time

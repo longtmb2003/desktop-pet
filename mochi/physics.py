@@ -18,6 +18,9 @@ REST_VY = 150                       # a floor bounce slower than this doesn't ha
 VEL_WINDOW = 0.12                   # only samples this recent (s) count: a mouse that stopped before release is a drop
 THROW_MIN, THROW_MAX = 350, 2600    # slower than THROW_MIN is a plain drop; faster than THROW_MAX is clamped
 SHAKE_WINDOW = 0.8                 # seconds of mouse history is_shake() gets to look at
+SHAKE_STROKE = 40                  # px a stroke must cover before turning back to count as a reversal (ignores tremor)
+SHAKE_TURNS = 4                    # reversals within the window that make a shake
+SHAKE_SPEED = 600                  # px/s average along the shaken axis; slower wiggling is just moving the mouse about
 MIN_W = 80                          # narrower windows can't hold the pet: span() would be empty and it would jitter
 
 Wins = dict[Any, tuple[float, float, float, float]]     # id -> (x, y, w, h), ordered bottom -> top
@@ -131,10 +134,27 @@ def step_air(x, y, vx, vy, dt, floor, b):
     return Flight(x, y, vx, vy, False, hit, impact)
 
 
+def _turns(vals):
+    """Direction reversals in `vals`; a reversal only counts once the position has come back SHAKE_STROKE px from the last extreme,
+    so hand tremor never counts."""
+    turns, sign, ext = 0, 0, vals[0]
+    for v in vals[1:]:
+        if sign * (v - ext) > 0: ext = v                                # still travelling the same way
+        elif abs(v - ext) >= SHAKE_STROKE:
+            turns += sign != 0; sign = 1 if v > ext else -1; ext = v    # the first stroke only sets the direction
+    return turns
+
+
 def is_shake(trail, now):
     """Is the mouse being shaken right now?
 
     `trail` is the pointer history while the pet is held: [(t, x, y), ...] oldest first, monotonic seconds, pixels, covering the
-    last SHAKE_WINDOW seconds up to `now`. Return True for a vigorous back-and-forth, False for an ordinary drag or a flick."""
-    # TODO(human): decide what counts as a shake (direction reversals, minimum stroke length, speed...) and return True/False
+    last SHAKE_WINDOW seconds up to `now`. Return True for a vigorous back-and-forth, False for an ordinary drag or a flick.
+    A shake is SHAKE_TURNS reversals of long-enough strokes along one axis, at an average of SHAKE_SPEED px/s or more."""
+    if len(trail) < 2 or trail[-1][0] - trail[0][0] <= 0: return False
+    span_t = trail[-1][0] - trail[0][0]
+    for axis in (1, 2):
+        vals = [p[axis] for p in trail]
+        path = sum(abs(b - a) for a, b in zip(vals, vals[1:], strict=False))
+        if _turns(vals) >= SHAKE_TURNS and path / span_t >= SHAKE_SPEED: return True
     return False
