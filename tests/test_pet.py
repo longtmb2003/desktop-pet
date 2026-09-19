@@ -461,6 +461,7 @@ def test_the_scared_pet_paints_inside_its_mask_and_differs_from_a_calm_fall(pet)
     calm, _ = frame(State(Motion.AIRBORNE))
     assert scared != calm
     assert all(m.contains(QPoint(x, y)) for y in range(S) for x in range(S) if scared.pixel(x, y) >> 24 > 40)
+    assert not any(scared.pixel(x, y) >> 24 for x in range(S) for y in (S - 1,))          # pedalling legs stay inside the window
 
 
 # ---- pushing against an edge ----------------------------------------------------------------------------------

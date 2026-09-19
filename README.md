@@ -4,7 +4,9 @@
 
 ![Mochi: 5 màu, 7 tư thế](docs/preview.png)
 
-*Ảnh trên do chính bộ vẽ của Mochi render ra (không phải ảnh chụp màn hình). GIF quay từ màn hình thật: chưa có.*
+![Các tư thế khác: hoảng sợ, làm việc, đẩy tường, lộn vòng, mệt, vui](docs/poses.png)
+
+*Hai ảnh trên do chính bộ vẽ của Mochi render ra (không phải ảnh chụp màn hình). GIF quay từ màn hình thật: chưa có.*
 
 ## Tính năng
 
@@ -19,7 +21,12 @@
 - Đi tới mép cửa sổ/màn hình, đôi khi pet nhắm mắt tì hai chân trước đẩy vào "bức tường" một lúc rồi quay lại hoặc ngồi xuống
 - Click xuyên qua phần trong suốt quanh pet
 - 5 màu (Kem, Cam, Xám, Bạc hà, Hồng), được nhớ cho lần chạy sau
-- Chuột phải: Màu / Ngủ / Gọi về / Tạm dừng / Tự chạy khi đăng nhập / Thoát
+- Bong bóng thoại: "Á!" khi hoảng sợ, thỉnh thoảng nói vu vơ, báo Pomodoro và thông báo từ chương trình khác. Có hàng đợi (tối đa 5), tự tắt sau vài giây, click xuyên qua, tự chọn bên trái/phải để không tràn màn hình
+- Pomodoro: chuột phải → Pomodoro → Bắt đầu. Khi tập trung, Mochi ngồi gõ laptop nhỏ; hết giờ thì có bong bóng, tiếng chuông và chuyển sang giờ nghỉ (tự đặt độ dài trong Cài đặt)
+- Theo giờ trong ngày (giờ địa phương): từ 00:00 đến 06:00 dễ ngủ hơn, từ 22:00 bớt chạy đuổi. Không ép ngủ khi bạn vừa chơi với nó
+- Máy bận: nếu cài `psutil`, CPU trên 80% thì Mochi toát mồ hôi, đi chậm lại và giảm tốc độ vẽ; xuống dưới 65% mới hết (khoảng giữa hai ngưỡng để không nhấp nháy). Đọc CPU 8 giây một lần
+- Chế độ yên lặng: không nói vu vơ, không âm thanh, giảm tốc độ vẽ khi đứng yên. Tự bật khi có ứng dụng toàn màn hình (KDE), tắt được trong Cài đặt
+- Chuột phải: Màu / Pomodoro / Chế độ yên lặng / Cài đặt / Ngủ / Gọi về / Tạm dừng / Tự chạy khi đăng nhập / Thoát
 
 ## Nền tảng hỗ trợ
 
@@ -45,6 +52,33 @@ scripts/install.sh --autostart   # cài cho riêng bạn vào ~/.local; bỏ --a
 `install.sh` không cần quyền root. Nó chép ứng dụng vào `~/.local/opt/mochi`, tạo lệnh `mochi`, mục trong menu ứng dụng (không mở terminal) và icon. Nếu bạn từng tạo `~/.config/autostart/mochi-pet.desktop` theo cách chạy `pet.py` cũ, script sẽ đổi tên nó thành `.disabled` để khỏi chạy hai bản.
 
 Tiến trình chạy nền có tên `mochi`, hiện đúng tên đó trong System Monitor (`pgrep -x mochi`). Mochi chỉ chạy một bản: chạy lần hai sẽ báo `already running` và thoát.
+
+## Cài đặt
+
+Chuột phải → **Cài đặt...** mở cửa sổ chỉnh: màu, tốc độ đi, tần suất hành vi, chạy đuổi, nói vu vơ, theo giờ trong ngày, âm thanh, theo dõi CPU, chế độ yên lặng (và tự bật khi toàn màn hình), tự chạy khi đăng nhập, độ dài Pomodoro, gọi Mochi về. Thay đổi có hiệu lực ngay và được nhớ (QSettings, `~/.config/mochi-pet/mochi.conf`). Giá trị hỏng trong file được thay bằng mặc định. Chưa có: đổi kích thước pet.
+
+Theo dõi CPU cần `psutil` (bản build sẵn có kèm; chạy từ mã nguồn thì `pip install psutil` hoặc `pip install ".[monitor]"`). Không có psutil thì mọi thứ khác vẫn chạy bình thường.
+
+## API DBus cho chương trình khác
+
+Mochi lắng nghe trên session bus, dịch vụ `org.mochi.Pet`, đường dẫn `/pet`, giao diện `org.mochi.Pet`:
+
+| Phương thức | Việc làm |
+|---|---|
+| `showMessage(s)` | hiện bong bóng (bỏ ký tự điều khiển, tối đa 200 ký tự) |
+| `setExpression(s)` | `normal`, `happy`, `dizzy`, `scared`, `tired`; từ chối khi pet đang bị kéo hoặc đang bay |
+| `notifyTaskFinished(s)` | bong bóng "Xong rồi: …", pet nhảy mừng, chuông (trừ khi yên lặng hoặc tắt âm) |
+| `startPomodoro(i)` | bắt đầu tập trung `i` phút (1 đến 180) |
+
+Mỗi phương thức trả `true` nếu đã thực hiện, `false` nếu bị từ chối (đầu vào sai, hoặc quá 20 lời gọi trong 10 giây). Ví dụ:
+
+```sh
+gdbus call --session --dest org.mochi.Pet --object-path /pet \
+  --method org.mochi.Pet.notifyTaskFinished "make -j8"
+make -j8 && gdbus call --session --dest org.mochi.Pet --object-path /pet --method org.mochi.Pet.showMessage "Build xong"
+```
+
+Bất kỳ tiến trình nào trong phiên của bạn đều gọi được API này (giống mọi dịch vụ session bus), nên nó chỉ làm những việc vô hại: hiện chữ, đổi biểu cảm, bắt đầu đồng hồ.
 
 ## Tự chạy khi đăng nhập
 
@@ -80,8 +114,14 @@ Test chạy không cần màn hình (`QT_QPA_PLATFORM=offscreen`). CI (GitHub Ac
 mochi/
 ├── app.py        điểm vào, dòng lệnh (`mochi autostart …`)
 ├── pet.py        widget: hành vi, vòng lặp vật lý theo thời gian thực, chuột, menu
-├── state.py      Motion × Expression × Action, thời lượng và quy tắc chuyển trạng thái
-├── physics.py    hình học thuần (chọn bề mặt, cửa sổ bị che, nhảy), không phụ thuộc Qt
+├── state.py      Motion × Expression × Action, thời lượng, quy tắc chuyển trạng thái (kể cả theo giờ)
+├── physics.py    hình học thuần (bề mặt, cửa sổ bị che, nhảy), ném/nảy, phát hiện lắc; không phụ thuộc Qt
+├── bubble.py     bong bóng thoại: cửa sổ riêng, hàng đợi, chọn vị trí
+├── pomodoro.py   đồng hồ Pomodoro (logic thuần, đồng hồ tiêm được)
+├── monitor.py    đọc CPU (psutil tuỳ chọn) và hysteresis
+├── api.py        API DBus công khai (kiểm tra đầu vào, giới hạn tần suất)
+├── settings_dialog.py  cửa sổ Cài đặt
+├── sound.py      tiếng chuông
 ├── renderer.py   vẽ vector, màu, vùng click
 ├── settings.py   lưu cài đặt (QSettings)
 ├── autostart.py  mục autostart XDG
@@ -111,9 +151,9 @@ Build lại icon / ảnh xem trước: `python scripts/make_icon.py`, `python sc
 
 ## Lộ trình
 
-- **v0.2 (bản này):** ổn định, tách kiến trúc, đóng gói.
-- **v0.3:** ném pet bằng chuột (quán tính), va chạm cạnh màn hình, chóng mặt, lắc, double-click lộn vòng, hoảng sợ khi cửa sổ biến mất.
-- **v0.4:** bong bóng thoại, Pomodoro, phản ứng theo giờ/CPU, API DBus thông báo, cửa sổ Settings và Quiet Mode.
+- **v0.2:** ổn định, tách kiến trúc, đóng gói. (xong)
+- **v0.3:** ném pet bằng chuột (quán tính), va chạm cạnh màn hình, chóng mặt, lắc, double-click lộn vòng, hoảng sợ khi cửa sổ biến mất, đẩy tường. (xong)
+- **v0.4 (bản này):** bong bóng thoại, Pomodoro, phản ứng theo giờ/CPU, API DBus, cửa sổ Cài đặt và chế độ yên lặng.
 - **v0.5:** nhiều pet / linh thú với hành vi và hình dạng riêng.
 
 ## License

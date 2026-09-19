@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mochi-pet"
-version = "0.2.0"
+version = "0.4.0"
 description = "Mochi: a tiny vector desktop pet for KDE Plasma"
 readme = "README.md"
 license = { text = "MIT" }

@@ -103,7 +103,7 @@ def paint(pet, p):
 
     # feet
     for i, m in enumerate((-1, 1)):
-        if scared: blob(TAIL, m * 18, 6 + math.sin(t * 24 + i * math.pi) * 8, 9, 10)          # legs pedalling the air
+        if scared: blob(TAIL, m * 18, -5 + math.sin(t * 24 + i * math.pi) * 6, 9, 10)          # legs pedalling the air
         elif up: blob(TAIL, m * 18, 6 + math.sin(t * 8 + i * 2) * 3, 9, 10)
         else:  blob(TAIL, m * 20, -5 - (max(0, math.sin(t * 9 + i * math.pi)) * 5 if walking else 0), 13, 8)
 
