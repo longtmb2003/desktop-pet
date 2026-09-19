@@ -13,7 +13,7 @@ dependencies = ["PySide6>=6.6"]
 
 [project.optional-dependencies]
 monitor = ["psutil>=5.9"]                       # optional: CPU-aware reactions (v0.4)
-dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.10", "pyinstaller>=6.6"]
+dev = ["psutil>=5.9", "pytest>=8", "ruff>=0.6", "mypy>=1.10", "pyinstaller>=6.6"]
 
 [project.scripts]
 mochi = "mochi.app:main"

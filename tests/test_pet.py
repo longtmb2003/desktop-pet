@@ -678,3 +678,77 @@ def test_chase_switch_reaches_the_behaviour_picker(pet, monkeypatch):
     pet.cfg.chase = False
     on_the_floor(pet); pet.enter(State()); pet.until = 0.0; pet.tick()
     assert seen["chase"] is False and "hour" in seen
+
+
+# ---- cpu monitor and frame rate --------------------------------------------------------------------------------
+def test_a_busy_cpu_makes_the_pet_hot_with_hysteresis_and_one_remark(pet):
+    readings = iter([50, 85, 90, 70, 60])
+    pet.read_cpu = lambda: next(readings)
+    seen = []
+    for _ in range(5):
+        pet.poll_cpu(); seen.append(pet.hot)
+        if pet.hot: pet.bubble.dismiss()
+    assert seen == [False, True, True, True, False]                      # 70% is inside the dead band: still hot
+    pet.hot = False; pet.bubble.dismiss()
+    pet.read_cpu = lambda: 95
+    pet.poll_cpu(); assert pet.bubble.lines == "Máy nóng quá..."
+
+
+def test_no_remark_when_quiet_and_a_missing_psutil_changes_nothing(pet):
+    pet.cfg.quiet = True
+    pet.read_cpu = lambda: 99
+    pet.poll_cpu(); assert pet.hot and not pet.bubble.isVisible()
+    pet.hot = False; pet.read_cpu = lambda: None                         # psutil not installed
+    pet.poll_cpu(); assert not pet.hot
+
+
+def test_the_monitor_timer_follows_the_setting_and_availability(pet, monkeypatch):
+    import mochi.pet as mp
+    monkeypatch.setattr(mp.monitor, "AVAILABLE", True)
+    pet.read_cpu = lambda: 0.0
+    pet.cfg.monitor = True; pet.sync_monitor(); assert pet.mon_timer.isActive() and pet.mon_timer.interval() == 8000
+    pet.hot = True
+    pet.cfg.monitor = False; pet.sync_monitor(); assert not pet.mon_timer.isActive() and not pet.hot
+    monkeypatch.setattr(mp.monitor, "AVAILABLE", False)
+    pet.cfg.monitor = True; pet.sync_monitor(); assert not pet.mon_timer.isActive()
+
+
+def test_frame_rate_drops_only_when_resting_and_never_during_physics(pet):
+    def fps_ms(state, **kw):
+        for k, v in kw.items(): setattr(pet, k, v)
+        pet.state = state; pet.retune(); return pet.timer.interval()
+    assert fps_ms(State(), grounded=True, hot=False) == 33
+    assert fps_ms(State(Motion.SLEEP)) == 50                             # asleep: 20 fps is plenty for the zzz
+    assert fps_ms(State(), hot=True) == 50                               # resting on a busy CPU
+    assert fps_ms(State(Motion.AIRBORNE), grounded=False) == 33          # falling: full rate, or the steps get coarse
+    assert fps_ms(State(Motion.DRAG)) == 33
+    assert fps_ms(State(action=Action.FLIP), grounded=True) == 33        # a one-shot animation
+    pet.hot = False; pet.cfg.quiet = True
+    assert fps_ms(State(Motion.WALK), grounded=True) == 50               # quiet mode also rests it
+    pet.cfg.quiet = False
+    assert fps_ms(State(Motion.WALK), grounded=True) == 33
+
+
+def test_a_hot_pet_walks_slower(pet):
+    def walked(hot):
+        pet.hot = hot
+        on_the_floor(pet); pet.enter(State(Motion.WALK)); pet.facing = 1
+        g = pet.screen_geo(); pet.px = g.left + 400; x0 = pet.px
+        for _ in range(10): pet.tick()
+        return pet.px - x0
+    assert walked(True) == pytest.approx(0.6 * walked(False), rel=0.05)
+
+
+def test_the_tired_pet_paints_inside_its_mask_and_looks_different(pet):
+    from PySide6.QtCore import QPoint
+    from PySide6.QtGui import QImage, QPainter
+
+    def frame(hot):
+        pet.hot, pet.grounded, pet.state, pet.t = hot, True, State(), 10.4
+        pet.mask_key = None; pet.update_mask(); m = pet.mask(); pet.clearMask()
+        img = QImage(S, S, QImage.Format_ARGB32); img.fill(0)
+        pt = QPainter(img); pet.render(pt, QPoint(0, 0)); pt.end()
+        return img, m
+    tired, m = frame(True)
+    assert tired != frame(False)[0]
+    assert all(m.contains(QPoint(x, y)) for y in range(S) for x in range(S) if tired.pixel(x, y) >> 24 > 40)

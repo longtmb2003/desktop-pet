@@ -8,7 +8,7 @@ from PySide6.QtCore import QElapsedTimer, QPoint, Qt, QTimer
 from PySide6.QtGui import QCursor, QGuiApplication, QPainter
 from PySide6.QtWidgets import QApplication, QMenu, QWidget
 
-from . import autostart, physics
+from . import autostart, monitor, physics
 from .bubble import SpeechBubble
 from .pomodoro import Pomodoro
 from .physics import FEET, IMPACT_DIZZY, S, THROW_MIN, WALK_SPEED, Bounds, DragTracker
@@ -20,6 +20,7 @@ from .state import Action, Expression, Motion, State, after, ends_at
 PUSH_CHANCE = 0.5                  # of the edge encounters that aren't a hop off, how many are a push against the "wall"
 CLICK_DELAY_MS = 250                # a click waits this long for a second click before it counts as a pet
 CHATTER = ("Meo~", "Bạn uống nước chưa?", "Nghỉ mắt một chút nhé!", "Mochi ở đây nè", "Nhớ lưu file nha", "Vươn vai một cái đi!")
+LOW_FPS_MS = 50                     # frame interval (ms) when asleep, or resting in Quiet Mode / on a busy CPU
 MAX_DT = 0.05                       # cap one frame's time step so a stall can't launch the pet through a window
 
 
@@ -40,13 +41,15 @@ class Pet(QWidget):
         self.px, self.py = random.uniform(g.left + 80, g.right - 240), g.top - 100
         self.enter(State(Motion.AIRBORNE))
         self.clock = QElapsedTimer(); self.clock.start()   # real frame time, see tick()
-        self.pomo = Pomodoro()
+        self.pomo, self.hot, self.cpu, self.read_cpu = Pomodoro(), False, monitor.Hysteresis(), monitor.cpu_percent
+        self.mon_timer = QTimer(self, interval=monitor.POLL_MS, timeout=self.poll_cpu)
         self.last_touch, self.now_hour = -1e9, lambda: datetime.now().hour      # local time zone; tests replace now_hour
         self.bubble, self.fullscreen = SpeechBubble(), False    # fullscreen: pushed by the platform (kwin.js)
         self.next_chat = random.uniform(60, 180)
         self.click_timer = QTimer(self, singleShot=True, interval=CLICK_DELAY_MS, timeout=self.pet_it)
         self.timer = QTimer(self, interval=33, timeout=self.tick)
         self.timer.start()
+        self.sync_monitor()
         QGuiApplication.instance().screenRemoved.connect(lambda _: QTimer.singleShot(0, self.ensure_visible))
 
     def set_windows(self, wins):
@@ -115,6 +118,7 @@ class Pet(QWidget):
         if self.t > self.next_chat:
             self.next_chat = self.t + random.uniform(120, 300)
             if self.state.motion in (Motion.IDLE, Motion.WALK): self.say(random.choice(CHATTER), chatter=True)
+        self.retune()
         if self.bubble.isVisible(): self.bubble.follow(self.px, self.py, self.screen_geo())
         self.update_mask()
         self.update()
@@ -123,6 +127,26 @@ class Pet(QWidget):
         """local hour for time-of-day habits, or None when they don't apply: switched off, or the user is playing with the pet
         (it is never nudged to sleep while being handled)"""
         return self.now_hour() if self.cfg.time_of_day and self.t - self.last_touch > 60 else None
+
+    def sync_monitor(self):
+        """start or stop CPU watching to match the setting (and whether psutil is there at all)"""
+        if self.cfg.monitor and monitor.AVAILABLE:
+            if not self.mon_timer.isActive(): self.read_cpu(); self.mon_timer.start()     # the first reading only primes the counter
+        else:
+            self.mon_timer.stop(); self.cpu.on = self.hot = False
+
+    def poll_cpu(self):
+        v = self.read_cpu()
+        if v is None: return
+        was, self.hot = self.hot, self.cpu.update(v)
+        if self.hot and not was: self.say("Máy nóng quá...", chatter=True)
+
+    def retune(self):
+        """frame rate: full speed by default, 20 fps while asleep, or resting when quiet or the CPU is busy; never while it moves
+        under physics (airborne, dragged, mid-action), where bigger steps would show"""
+        resting = self.grounded and self.state.motion in (Motion.IDLE, Motion.WALK) and self.state.action is Action.NONE
+        ms = LOW_FPS_MS if self.state.motion is Motion.SLEEP or resting and (self.hot or self.quiet) else 33
+        if self.timer.interval() != ms: self.timer.setInterval(ms)
 
     def start_focus(self, minutes=None):
         """begin a Pomodoro: `minutes` of focus (default from Settings), then a break"""
@@ -175,7 +199,7 @@ class Pet(QWidget):
 
     def walk(self, dt, g, cx, wid):
         dizzy = self.state.expression is Expression.DIZZY
-        step = self.facing * WALK_SPEED * self.cfg.speed * dt
+        step = self.facing * WALK_SPEED * self.cfg.speed * (0.6 if self.hot else 1) * dt      # too hot to hurry
         if dizzy:                                                                # half speed, swaying, changing its mind
             step = step / 2 + math.sin(self.t * 7) * 40 * dt
             if random.random() < 0.02: self.facing = -self.facing

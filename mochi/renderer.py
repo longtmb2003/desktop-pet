@@ -54,6 +54,7 @@ def paint(pet, p):
     motion, act = state.motion, state.action
     happy, sleep, drag = state.expression is Expression.HAPPY, motion is Motion.SLEEP, motion is Motion.DRAG
     dizzy, scared = state.expression is Expression.DIZZY, state.expression is Expression.SCARED
+    tired = (pet.hot or state.expression is Expression.TIRED) and not (dizzy or scared or happy or sleep or drag)
     walking = motion is Motion.WALK and act is Action.NONE          # a chase runs, it doesn't use the walk cycle
     up = motion in (Motion.AIRBORNE, Motion.DRAG)
     th = THEMES[pet.theme]
@@ -127,6 +128,8 @@ def paint(pet, p):
             arc = QPainterPath(QPointF(x - 7, -46)); arc.quadTo(x, -40, x + 7, -46)
         elif happy:
             arc = QPainterPath(QPointF(x - 7, -43)); arc.quadTo(x, -53, x + 7, -43)
+        elif tired:                                                        # half-shut, drooping
+            arc = QPainterPath(QPointF(x - 7, -47 + (1 if x < 0 else 0))); arc.lineTo(x + 7, -44 - (1 if x < 0 else 0))
         else:
             r = 1.2 if drag else 1
             blob(DARK, x + lx, -46 + ly, 7.5 * r, 9.5 * r)
@@ -168,6 +171,11 @@ def paint(pet, p):
         for i in range(3):
             a = t * 5 + i * 2.094
             p.save(); p.translate(34 * math.cos(a), -104 + 9 * math.sin(a)); p.rotate(t * 90); p.drawPath(star(5)); p.restore()
+    if tired:                                                          # two sweat drops sliding down the forehead
+        for i, sx in enumerate((-38, 40)):
+            ph = (t * 0.7 + i * 0.5) % 1
+            p.setPen(Qt.NoPen); p.setBrush(QColor(110, 185, 255, int(math.sin(ph * math.pi) * 230)))
+            p.drawEllipse(QPointF(sx, -80 + ph * 34), 3, 4.5)
     if scared:                                                         # a sweat drop flicking off the forehead
         ph = (t * 2.5) % 1
         p.setPen(Qt.NoPen); p.setBrush(QColor(110, 185, 255, int((1 - ph) * 230)))
