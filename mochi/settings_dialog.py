@@ -40,6 +40,7 @@ class SettingsDialog(QDialog):
 
         self.boxes = {}
         for key, text in (("chase", "Cho phép chạy đuổi theo con trỏ"), ("chatter", "Thỉnh thoảng nói vu vơ"),
+                          ("desktop", "Nhận xét về các mục trên màn hình nền"),
                           ("time_of_day", "Theo giờ trong ngày (đêm buồn ngủ hơn)"), ("sound", "Âm thanh (báo hết giờ Pomodoro)"),
                           ("monitor", "Phản ứng khi máy bận (CPU cao)"), ("quiet", "Chế độ yên lặng"),
                           ("quiet_auto", "Tự yên lặng khi có ứng dụng toàn màn hình")):

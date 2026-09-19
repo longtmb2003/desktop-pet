@@ -48,3 +48,9 @@ def write_pack(root, wide=False, **over):
     j.update(over)
     (root / "pack.json").write_text(json.dumps(j), encoding="utf-8")
     return root
+
+
+@pytest.fixture(autouse=True)
+def no_real_desktop(tmp_path, monkeypatch):
+    """tests never look at (or open things from) the real desktop folder"""
+    monkeypatch.setenv("MOCHI_DESKTOP", str(tmp_path / "desktop"))

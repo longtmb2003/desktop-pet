@@ -11,6 +11,7 @@ pack.json (all lengths in window pixels at scale 1, image coordinates in pixels 
   fps              {"talk": 10, ...} frames per second of an animated kind (default 8)
   behaviors        {"idle": 4, "walk": 3, "sleep": 1, "chase": 1, "rant": 2, ...} weights; names as in state.BEHAVIOR_NAMES
   chatter, scream  what it says now and then / when the ground vanishes
+  drop, desktop_remark   what it says when a file is dropped on it / about an item on the desktop; "{name}" stands for the item
   sway, bob        walking waddle: degrees of tilt and pixels of bounce
 """
 import json
@@ -112,5 +113,6 @@ def load_dir(root):
     chatter = tuple(c for c in (clean_text(x) for x in (j.get("chatter") or [])[:50] if isinstance(x, str)) if c)
     sway, bob = _num(j.get("sway", 4), "sway", 0, 20), _num(j.get("bob", 4), "bob", 0, 30)
     pack = SpritePack(body, height, (bx, by, bw, bh), faces, fps, sway, bob)
+    text = {k: clean_text(j.get(k) or "")[:80] or dflt for k, dflt in (("drop", PetDef.drop), ("desktop_remark", PetDef.desktop_remark))}
     return PetDef(pid, name, "sprite", size, feet, feet - int(height), _num(j.get("walk_speed", 45), "walk_speed", 5, 400), weights,
-                  chatter or ("...",), clean_text(j.get("scream") or "Á!")[:20] or "Á!", pack)
+                  chatter or ("...",), clean_text(j.get("scream") or "Á!")[:20] or "Á!", text["drop"], text["desktop_remark"], pack)
