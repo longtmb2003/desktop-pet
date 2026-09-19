@@ -24,6 +24,7 @@ class PetDef:
     behaviors: Mapping = field(default_factory=lambda: dict(BEHAVIORS))     # (motion, action) -> weight: what it does next
     chatter: tuple = ("Meo~",)                  # things it says now and then
     scream: str = "Á!"                          # what it yells when the ground vanishes
+    scold: tuple = ()                           # what it says when it scolds you (a character with arms points and wags its finger)
     turn_s: float = 0.0                         # seconds it takes to turn round when it changes direction (0: at once)
     drop: str = "Nom nom! {name} ngon quá!"     # what it says when something is dropped on it ({name}: what)
     desktop_remark: str = "{name} nằm đó lâu rồi nhỉ?"     # an idle remark about something on the desktop

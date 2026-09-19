@@ -54,6 +54,16 @@ def surface(wins, support, cx, feet, b, feet_y=FEET, head=HEAD):
     return best - feet_y, wid
 
 
+def leap(cx, feet, tx, ty, margin=45, vmax=1500):
+    """(vx, vy) for a jump from feet at (cx, feet) that lands with its feet at (tx, ty): up past the higher of the two by `margin`, then
+    down onto the target. None if it would take a sideways speed above `vmax` (too far to reach in one jump)"""
+    apex = min(feet, ty) - margin
+    vy = -math.sqrt(2 * GRAVITY * (feet - apex))
+    t = -vy / GRAVITY + math.sqrt(2 * (ty - apex) / GRAVITY)
+    vx = (tx - cx) / t
+    return None if abs(vx) > vmax else (vx, vy)
+
+
 def span(wins, b, wid):
     """x-range the centre may walk in: the screen, or the top of the window we stand on"""
     lo, hi = b.left + 50, b.right - 50

@@ -32,7 +32,7 @@ def star(r):
     return p
 
 
-def silhouette(f, sleep, stretch, hearts, flip=False):
+def silhouette(f, sleep, stretch, hearts, flip=False, lively=False):
     """Region of the pet window that should catch clicks; the rest is click-through. f = -facing."""
     c = S // 2
     if flip: return QRegion(c - 110, FEET - 62 - 110, 220, 220, QRegion.Ellipse)    # a turning pet sweeps a circle around its middle
@@ -42,6 +42,7 @@ def silhouette(f, sleep, stretch, hearts, flip=False):
     r += QRegion(min(c + f * 30, c + f * 100), FEET - 92, 70, 96)               # tail
     if sleep: r += QRegion(c + 28, FEET - 124, 48, 44)                         # zzz
     if stretch: r += r.translated(-f * 10, 0) + r.translated(0, -8)            # the pose leans forward and lifts its bum
+    if lively: r += r.translated(-28, 0) + r.translated(28, 0) + r.translated(0, -12)    # tilting, bouncing: room on both sides and above
     for x, y, _ in hearts: r += QRegion(int(c + x - 10), int(FEET + y - 10), 20, 20)
     return r
 
@@ -52,11 +53,12 @@ def paint(pet, p):
     p.translate(S / 2, FEET)
     t, state = pet.t, pet.state
     motion, act = state.motion, state.action
-    happy, sleep, drag = state.expression is Expression.HAPPY, motion is Motion.SLEEP, motion is Motion.DRAG
+    happy = state.expression is Expression.HAPPY or act in (Action.STOMP, Action.DANCE)                    # (bouncing about: grinning)
+    sleep, drag = motion is Motion.SLEEP, motion is Motion.DRAG
     dizzy, scared = state.expression is Expression.DIZZY, state.expression is Expression.SCARED
     tired = (pet.hot or state.expression is Expression.TIRED) and not (dizzy or scared or happy or sleep or drag)
     walking = motion is Motion.WALK and act is Action.NONE          # a chase runs, it doesn't use the walk cycle
-    up = motion in (Motion.AIRBORNE, Motion.DRAG)
+    up = motion in (Motion.AIRBORNE, Motion.DRAG) or act is Action.DANGLE
     th = THEMES[pet.theme]
     DARK, TAIL, EAR, PINK = (QColor(th[k]) for k in ("eye", "tail", "ear", "inner"))
     if pet.grounded:                                                          # shadow only when standing
@@ -72,6 +74,10 @@ def paint(pet, p):
     elif act is Action.YAWN: sy += .05 * o; tilt = -5 * o
     elif act is Action.CHASE: hop = abs(math.sin(t * 14)) * 9
     elif act is Action.PUSH: tilt = 9 + 2 * math.sin(t * 14); shift = 3               # leaning into the wall, shoving
+    elif act is Action.STOMP: hop = abs(math.sin(t * 10)) * 8; sy -= .05 * max(0, math.cos(t * 10))          # bouncing on the window
+    elif act is Action.PEEK: tilt = 16; shift = 4                                                  # leaning over the edge to look down
+    elif act is Action.DANGLE: sy -= .03                                                           # sitting on the edge, legs swinging
+    elif act is Action.DANCE: tilt = math.sin(t * 8) * 5; hop = abs(math.sin(t * 8)) * 6
     if scared: shift += math.sin(t * 45) * 1.5                                                    # trembling
     sy -= pet.squash
     sx = 2 - sy if not drag else .94        # keep volume: taller = thinner
@@ -104,7 +110,7 @@ def paint(pet, p):
     # feet
     for i, m in enumerate((-1, 1)):
         if scared: blob(TAIL, m * 18, -5 + math.sin(t * 24 + i * math.pi) * 6, 9, 10)          # legs pedalling the air
-        elif up: blob(TAIL, m * 18, 6 + math.sin(t * 8 + i * 2) * 3, 9, 10)
+        elif up: blob(TAIL, m * 18, (0 if act is Action.DANGLE else 6) + math.sin(t * 8 + i * 2) * 3, 9, 10)   # (dangling: keep in window)
         else:  blob(TAIL, m * 20, -5 - (max(0, math.sin(t * 9 + i * math.pi)) * 5 if walking else 0), 13, 8)
 
     # body

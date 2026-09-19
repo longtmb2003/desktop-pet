@@ -60,5 +60,7 @@ class Settings:
     night_on = _prop("night_on", True)                      # ... and the night's sleep (may run past midnight)
     night_from = _prop("night_from", "22:00")
     night_to = _prop("night_to", "06:00")
+    mischief = _prop("mischief", True)                     # get up to mischief on the window you are working in
+    app_remarks = _prop("app_remarks", True)               # remark on the kind of program you are using (its class, never its title)
     focus_min = _prop("focus_min", 25, 1, 180)          # Pomodoro focus length
     break_min = _prop("break_min", 5, 1, 60)            # Pomodoro break length

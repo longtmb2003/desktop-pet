@@ -278,3 +278,27 @@ def test_a_single_turn_or_a_flick_is_not_a_shake():
     assert is_shake(there_and_back, 0.79) is False                      # fast, long, but one reversal
     assert is_shake([(0.0, 0, 0)], 0.0) is False                        # a single sample
     assert is_shake([(0.5, 0, 0), (0.5, 90, 0)], 0.5) is False          # zero elapsed time
+
+
+def test_leap_lands_exactly_on_the_target_from_anywhere_in_reach():
+    import math
+
+    from mochi.physics import GRAVITY, leap
+    for feet, ty, dx in ((900, 400, 300), (900, 400, -450), (400, 900, 200), (500, 500, 600), (1000, 120, 0)):
+        vx, vy = leap(100, feet, 100 + dx, ty)
+        y, t, dt = feet, 0.0, 1e-4
+        v = vy
+        while True:                                                     # integrate the flight and see where it comes down
+            v += GRAVITY * dt; y += v * dt; t += dt
+            if v > 0 and y >= ty: break
+        assert abs((100 + vx * t) - (100 + dx)) < 3 and abs(y - ty) < 1, (feet, ty, dx)
+        assert vy < 0 and math.isfinite(vx)                             # always launched upwards, apex above both ends
+
+
+def test_leap_goes_up_past_the_higher_end_and_gives_up_on_impossible_distances():
+    from mochi.physics import GRAVITY, leap
+    vx, vy = leap(0, 800, 200, 300, margin=45)
+    apex = 800 - vy * vy / (2 * GRAVITY)
+    assert abs(apex - (300 - 45)) < 0.5                                 # the top of the jump is 45 px above the landing
+    assert leap(0, 800, 5000, 300) is None                              # 5000 px sideways in one jump: no
+    assert leap(0, 800, 0, 300)[0] == 0                                 # straight up and down

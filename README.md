@@ -29,6 +29,9 @@
 - Nhắc việc do bạn tự đặt: lặp lại sau mỗi N phút ("Uống nước đi!") hoặc hằng ngày vào giờ nhất định, chọn được các ngày trong tuần. Đến hạn Mochi nói câu nhắc bằng bong bóng, nhún nhảy và kêu chuông (trừ khi yên lặng hoặc tắt âm). Chuột phải → Nhắc việc...
 - Chế độ: Bình thường, Làm việc (ngồi gõ laptop suốt, ít nói, không chạy đuổi), Chơi đùa (hiếu động, hay chạy đuổi), Ngủ (ngủ liền, tắt tiếng), Yên lặng; và bạn lưu được cài đặt hiện tại thành chế độ của riêng mình. Đổi nhanh ở chuột phải → Chế độ
 - Màn hình nền: thả một file/icon lên Mochi thì nó phản ứng ("Nom nom! báo cáo.pdf ngon quá!"; nó không mở, không di chuyển, không xoá file); thỉnh thoảng nó nhận xét về một mục trên desktop
+- Nghịch ngợm trên cửa sổ bạn đang làm việc: khi bạn dùng một cửa sổ được một lúc (trên 15 giây), thỉnh thoảng (mỗi 1 đến 2,5 phút) Mochi nói một câu hợp với ứng dụng đó ("Bug đâu, ra đây!" với trình soạn code, "Mở bao nhiêu tab rồi?" với trình duyệt...), nhảy lên đỉnh cửa sổ và nghịch: nhún nhảy, nhảy múa, ngồi ở mép đung đưa chân, hoặc thò người nhìn xuống. Cửa sổ không đứng được (phóng to hết cỡ, che khuất, quá hẹp) thì nó nghịch ngay ở sàn. Không nghịch khi đang Pomodoro, yên lặng, đang ngủ hay vừa bị bạn vuốt ve; tắt được trong Cài đặt
+- Hà Nhân còn mắng bạn: chìa ngón tay chỉ thẳng vào con trỏ chuột, giơ ngón tay lắc "không được đâu", hoặc đi đi lại lại vung tay lên lớp, kèm câu mắng ("Làm việc đi, đừng có lười!")
+- Hà Nhân đi hướng nào thì mặt quay hướng đó, đổi chiều thì xoay người lại (không đi lùi)
 - Lời thoại hiện 2,5 đến 5 giây tuỳ độ dài
 - Chuột phải: Màu / Chế độ / Pomodoro / Nhắc việc / Chế độ yên lặng / Cài đặt / Nhân vật / Ngủ / Gọi về / Tạm dừng / Tự chạy khi đăng nhập / Thoát
 
@@ -68,6 +71,8 @@ Theo dõi CPU cần `psutil` (bản build sẵn có kèm; chạy từ mã nguồ
 **Nhắc việc** lưu trong cài đặt (JSON, tối đa 30). Nhắc lặp lại tính bằng đồng hồ đơn điệu, nên máy ngủ đông không làm dồn cục các lần nhắc; nhắc hằng ngày trễ quá 5 phút thì bỏ qua thay vì nhắc muộn. Đang có ứng dụng toàn màn hình (và "Tự yên lặng" bật) thì lời nhắc đợi đến khi hết toàn màn hình.
 
 **Chế độ** là một gói các cài đặt (tần suất, tốc độ, chạy đuổi, nói vu vơ, theo giờ, âm thanh, yên lặng) cộng với việc nghiêng về hành vi nào, hoặc giữ pet mãi ở một việc (ngủ / gõ laptop). Chọn chế độ thì các cài đặt đó được đặt lại theo chế độ; chỉnh tay sau đó vẫn được. Đang Pomodoro thì pet luôn ngồi gõ laptop bất kể chế độ.
+
+**Cửa sổ đang làm việc**: script KWin của Mochi gửi cho pet thêm **id và lớp chương trình** của cửa sổ đang dùng (ví dụ `code`, `firefox`), không bao giờ gửi tiêu đề cửa sổ (vì tiêu đề chứa tên file và tên trang). Mochi chỉ dùng lớp chương trình để chọn câu nói hợp với công việc; không lưu và không gửi đi đâu.
 
 **Màn hình nền**: KDE không cho biết icon nằm ở đâu trên màn hình, và Mochi không tự bật hỗ trợ tiếp cận (AT-SPI) của cả phiên làm việc chỉ để dò icon. Vì vậy Mochi làm việc với **nội dung thư mục desktop** (tên các mục, đọc `Name=` của lối tắt `.desktop`), không với vị trí. Nó không đi tới đứng cạnh từng icon.
 

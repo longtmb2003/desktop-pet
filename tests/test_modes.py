@@ -20,7 +20,8 @@ def test_every_builtin_sets_every_key_within_range():
 def test_values_from_junk_are_cleaned_field_by_field():
     got = modes.clean_values({"activity": 99, "speed": -1, "chase": "yes", "chatter": False, "sound": None, "quiet": 1, "extra": 5,
                              "time_of_day": True})
-    assert got == {"activity": 3.0, "speed": 0.3, "chase": True, "chatter": False, "time_of_day": True, "sound": True, "quiet": False}
+    assert got == {"activity": 3.0, "speed": 0.3, "chase": True, "chatter": False, "time_of_day": True, "sound": True, "quiet": False,
+                   "mischief": True}
     assert modes.clean_values(None) == modes.DEFAULTS and modes.clean_values({"speed": float("nan")})["speed"] == 1.0
     assert modes.clean_values({"activity": True})["activity"] == 1.0            # a bool is not a number here
 

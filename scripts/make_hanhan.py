@@ -129,7 +129,9 @@ def main():
     (OUT / "pack.json").write_text(json.dumps({
         "id": "hanhan", "name": "Hà Nhân", "size": 240, "feet": 232, "height": 200, "walk_speed": 42,
         "body": "body.png", "face": {"box": list(box)}, "faces": files, "fps": {"talk": 12, "laugh": 8},
-        "behaviors": {"idle": 4, "walk": 4, "sleep": 1, "chase": 1, "rant": 2, "yawn": 1},
+        "behaviors": {"idle": 4, "walk": 4, "sleep": 1, "chase": 1, "rant": 2, "yawn": 1, "point": 2, "wag": 2, "lecture": 1},
+        "scold": ["Làm việc đi, đừng có lười!", "Nhìn cái gì mà nhìn!", "Sao còn chưa lưu file hả?", "Bỏ cái điện thoại xuống!",
+                  "Ngồi thẳng lưng lên!", "Uống nước đi, nói mãi không nghe!", "Deadline đến nơi rồi kìa!", "Cái mặt đó là sao hả?"],
         "chatter": ["Làm việc đi!", "Sao còn chưa lưu file?", "Nhìn cái gì?", "Uống nước chưa hả?", "Ngồi lì thế, đứng dậy đi!",
                     "Hừm...", "Nghỉ mắt tí đi, đỏ hết rồi kìa"],
         "scream": "Trời ơi!", "drop": "Cái gì đây? {name}", "desktop_remark": "{name}... nằm chình ình ở đó làm gì?",

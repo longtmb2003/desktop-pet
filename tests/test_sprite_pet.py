@@ -1,34 +1,12 @@
-from pathlib import Path
 
 import pytest
-from conftest import write_pack
-from PySide6.QtCore import QPoint, QSettings, Qt
-from PySide6.QtGui import QImage, QPainter
+from conftest import HANHAN, render, uncovered_and_clipped, write_pack
+from PySide6.QtCore import QPoint
 
-from mochi.pet import Pet
 from mochi.pets import MOCHI
 from mochi.pets.pack import load_dir
 from mochi.physics import FEET, S
-from mochi.settings import Settings
 from mochi.state import Action, Expression, Motion, State
-
-
-@pytest.fixture
-def pets(qapp, tmp_path):
-    return {"mochi": MOCHI, "blob": load_dir(write_pack(tmp_path / "pack"))}
-
-
-@pytest.fixture
-def make(qapp, tmp_path, pets):
-    made = []
-
-    def build(pet="blob", scale=1.0, pets=pets):
-        cfg = Settings(QSettings(str(tmp_path / f"s{len(made)}.ini"), QSettings.IniFormat)); cfg.pet, cfg.scale = pet, scale
-        p = Pet(cfg, pets); p.timer.stop(); p.clock.restart = lambda: 33
-        made.append(p)
-        return p
-    yield build
-    for p in made: p.close()
 
 
 def floor_y(p):
@@ -149,20 +127,6 @@ STATES = [State(), State(Motion.WALK), State(Motion.WALK, Expression.DIZZY), Sta
           State(Motion.AIRBORNE, Expression.SCARED), State(Motion.DRAG), State(action=Action.FLIP), State(action=Action.WORK),
           State(Motion.WALK, action=Action.PUSH), State(Motion.WALK, action=Action.CHASE), State(action=Action.RANT),
           State(action=Action.YAWN)]
-
-
-def uncovered_and_clipped(p):
-    """(strongest visible pixel outside the click mask, strongest visible pixel on the window edge), as alpha values, for what the
-    pet paints now. Done with image operations, not a Python loop over pixels, so a sweep of poses stays fast."""
-    n = p.size
-    p.mask_key = None; p.update_mask(); m = p.mask(); p.clearMask()
-    img = QImage(n, n, QImage.Format_ARGB32); img.fill(0)
-    pt = QPainter(img); p.render(pt, QPoint(0, 0)); pt.end()
-    a = bytes(img.constBits())[3::4]
-    edge = max(max(a[:n]), max(a[-n:]), max(a[::n]), max(a[n - 1::n]))
-    q = QPainter(img); q.setClipRegion(m); q.setCompositionMode(QPainter.CompositionMode_DestinationOut)
-    q.fillRect(img.rect(), Qt.black); q.end()
-    return max(bytes(img.constBits())[3::4]), edge                       # what remains after erasing everything the mask covers
 
 
 @pytest.mark.parametrize("scale", [0.6, 1.0, 1.7])
@@ -289,9 +253,6 @@ def test_hearts_rise_from_above_the_head_of_whatever_it_is(make):
     assert all(y == -95 for _, y, _ in m.hearts)                         # Mochi's hearts are exactly where they always were
 
 
-HANHAN = Path(__file__).resolve().parent.parent / "mochi" / "pets" / "packs" / "hanhan"
-
-
 @pytest.mark.skipif(not (HANHAN / "pack.json").exists(), reason="the Hà Nhân pack is local-only (artwork not in the repository)")
 @pytest.mark.parametrize("scale", [0.6, 1.0, 1.7])
 def test_the_real_hanhan_pack_is_never_clipped_in_any_pose(qapp, tmp_path, make, scale):
@@ -326,13 +287,6 @@ def test_holding_a_prop_stays_inside_the_mask_and_the_window_and_looks_different
     p.state = S_(); idle = p.grab().toImage()
     p.state = S_(action=Action.WORK); working = p.grab().toImage()
     assert idle != working                                                   # the prop is really drawn
-
-
-def render(p):
-    from PySide6.QtCore import QPoint
-    img = QImage(p.size, p.size, QImage.Format_ARGB32); img.fill(0)
-    pt = QPainter(img); p.render(pt, QPoint(0, 0)); pt.end()
-    return img
 
 
 def test_the_busy_sign_is_red_and_its_text_reads_the_same_whichever_way_it_faces(qapp, tmp_path, make):

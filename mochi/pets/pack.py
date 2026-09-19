@@ -12,6 +12,7 @@ pack.json (all lengths in window pixels at scale 1, image coordinates in pixels 
   behaviors        {"idle": 4, "walk": 3, "sleep": 1, "chase": 1, "rant": 2, ...} weights; names as in state.BEHAVIOR_NAMES
                    ("sleep" is accepted but never picked at random: sleeping follows the schedule, see sleep.py)
   chatter, scream  what it says now and then / when the ground vanishes
+  scold            lines it says while scolding you ("point", "wag", "lecture" in behaviors make it jab and wag a finger at you)
   drop, desktop_remark   what it says when a file is dropped on it / about an item on the desktop; "{name}" stands for the item
   sway, bob        walking waddle: degrees of tilt and pixels of bounce
   looks            "right" (default) or "left": the way the art in body.png faces. It is mirrored so it always looks where it walks
@@ -135,7 +136,8 @@ def load_dir(root):
     turn = _num(j.get("turn", 0.25), "turn", 0, 2)
     pack = SpritePack(body, height, (bx, by, bw, bh), faces, fps, sway, bob, art=-1 if looks == "left" else 1, work_prop=prop,
                       coat=coat_color(body))
+    scold = tuple(c for c in (clean_text(x)[:80] for x in (j.get("scold") or [])[:30] if isinstance(x, str)) if c)
     text = {k: clean_text(j.get(k) or "")[:80] or dflt for k, dflt in (("drop", PetDef.drop), ("desktop_remark", PetDef.desktop_remark))}
     return PetDef(pid, name, "sprite", size, feet, feet - int(height), _num(j.get("walk_speed", 45), "walk_speed", 5, 400), weights,
-                  chatter or ("...",), clean_text(j.get("scream") or "Á!")[:20] or "Á!", drop=text["drop"],
+                  chatter or ("...",), clean_text(j.get("scream") or "Á!")[:20] or "Á!", drop=text["drop"], scold=scold,
                   desktop_remark=text["desktop_remark"], pack=pack, turn_s=turn)

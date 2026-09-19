@@ -8,7 +8,7 @@ from PySide6.QtCore import QElapsedTimer, QFileSystemWatcher, QPoint, Qt, QTimer
 from PySide6.QtGui import QCursor, QGuiApplication, QPainter, QTransform
 from PySide6.QtWidgets import QApplication, QMenu, QWidget
 
-from . import autostart, desktop, modes, monitor, physics, sleep
+from . import apps, autostart, desktop, modes, monitor, physics, sleep
 from . import reminders as rem
 from .bubble import SpeechBubble
 from .pomodoro import Pomodoro
@@ -20,7 +20,7 @@ from .settings import Settings
 from .settings_dialog import SettingsDialog
 from .sprite import paint_sprite, sprite_mask, sprite_mask_key
 from .sound import chime
-from .state import Action, Expression, Motion, State, after, ends_at
+from .state import SCOLDING, Action, Expression, Motion, State, after, ends_at
 
 PUSH_CHANCE = 0.5                  # of the edge encounters that aren't a hop off, how many are a push against the "wall"
 CLICK_DELAY_MS = 250                # a click waits this long for a second click before it counts as a pet
@@ -57,6 +57,8 @@ class Pet(QWidget):
         self.last_touch, self.now_hour = -1e9, lambda: datetime.now().hour      # local time zone; tests replace now_hour
         self.now_time = lambda: datetime.now().time()
         self.locked = self.suspended = False                                    # told by the PowerWatcher (power.py)
+        self.active_id, self.active_class, self.active_since = "", "", 0.0        # the window the user is working in (reported by KWin)
+        self.next_mischief, self.pending_mischief = 60.0, None                    # pending: (what to do, give up by) once it has jumped up
         self.woken_for = ""                                                      # a scheduled sleep the user cancelled by choosing a mode
         self.sleeping_for, self.power = "", None                                # why it fell asleep by itself: "system" | "nap" | "night"
         self.bubble, self.fullscreen = SpeechBubble(), False    # fullscreen: pushed by the platform (kwin.js)
@@ -78,6 +80,7 @@ class Pet(QWidget):
         if state.motion is Motion.WALK and state.action is Action.NONE:
             self.facing = random.choice((-1, 1))
         if state.action is Action.RANT and hasattr(self, "bubble"): self.say(random.choice(self.defn.chatter), chatter=True)
+        if state.action in SCOLDING and hasattr(self, "bubble"): self.say(random.choice(self.defn.scold or ("Làm việc đi!",)), chatter=True)
 
     def fit_size(self):
         """derive the window size and floor/head geometry from the current pet definition and scale"""
@@ -153,6 +156,7 @@ class Pet(QWidget):
                 self.land()
             if riding:                                             # on the floor or a window: free to move
                 self.grounded = True
+                self.start_pending_mischief(wid)
                 if self.state.motion is Motion.WALK:
                     if self.state.action is Action.CHASE:
                         self.chase(dt, g, cx, wid)
@@ -164,7 +168,7 @@ class Pet(QWidget):
                 if edge: self.facing = -edge                                # after shoving the edge, never walk straight back into it
             self.move(int(self.px), int(self.py))
         if self.pomo.active: self.pomodoro_event(self.pomo.poll())
-        if self.t >= self.next_check: self.next_check = self.t + 1.0; self.check_reminders(); self.check_sleep()
+        if self.t >= self.next_check: self.next_check = self.t + 1.0; self.check_reminders(); self.check_sleep(); self.check_mischief()
         if self.t > self.next_chat:
             self.next_chat = self.t + random.uniform(120, 300)
             if self.state.motion in (Motion.IDLE, Motion.WALK): self.say(self.idle_remark(), chatter=True)
@@ -328,6 +332,68 @@ class Pet(QWidget):
                 self.save_mode(name)
             except ValueError as e:
                 self.say(str(e), urgent=True)
+
+    # ---- mischief on the window you are working in ---------------------------
+    def set_active(self, wid, cls):
+        """KWin says which normal window the user is working in now ("" = none) and its program class"""
+        if wid != self.active_id: self.active_id, self.active_since = wid, self.t
+        self.active_class = cls
+
+    def check_mischief(self):
+        """once a second: if the user has been at the same window for a while, sometimes go and play on it"""
+        if not self.cfg.mischief or self.quiet or self.pomo.active or self.sleep_reason() or self.t < self.next_mischief: return
+        settled = self.grounded and self.state.motion in (Motion.IDLE, Motion.WALK) and self.state.action is Action.NONE
+        if not settled or self.pending_mischief or self.t - self.last_touch < 10: return
+        if self.active_id not in self.wins or self.t - self.active_since < 15: return
+        self.next_mischief = self.t + random.uniform(60, 150) / self.cfg.activity
+        self.begin_mischief()
+
+    def mischief_kinds(self, edge_ok):
+        """what it may get up to: bouncing and dancing anywhere, peeking and dangling only at a window's edge, scolding if it has arms"""
+        edge = [Action.PEEK, Action.DANGLE] if edge_ok else []
+        return [Action.STOMP, Action.DANCE, *edge, *(SCOLDING if self.defn.scold else ())]
+
+    def window_spot(self, wid, edge):
+        """(x of the centre, facing outwards) to stand on top of window `wid`: near the edge nearest to it if `edge`, else the middle;
+        None if it can't be stood on (too high up the screen, too narrow, covered)"""
+        x, y, w, _h = self.wins[wid]
+        g = self.screen_geo()
+        if w < physics.MIN_W or y < g.top + self.head or y > g.bottom: return None
+        cx = self.px + self.size / 2
+        lo, hi = max(x + 45, g.left + 60), min(x + w - 45, g.right - 60)
+        if lo > hi: return None
+        tx, out = (lo, -1) if abs(cx - lo) < abs(cx - hi) else (hi, 1)
+        if not edge: tx, out = max(lo, min(hi, x + w / 2)), self.facing
+        return None if physics.covered(self.wins, wid, tx, y + 1) else (tx, out)
+
+    def begin_mischief(self):
+        """say something about what the user is using, then jump onto their window and misbehave (or do it where it stands if it is
+        already on the window, or on the floor if the window can't be stood on, e.g. it is maximised)"""
+        if self.cfg.app_remarks: self.say(apps.remark(self.active_class), chatter=True)
+        wid = self.active_id
+        on_it = self.support == wid
+        kind = random.choice(self.mischief_kinds(edge_ok=not on_it))
+        spot = None if on_it else self.window_spot(wid, kind in (Action.PEEK, Action.DANGLE))
+        if on_it or spot is None:
+            if kind in (Action.PEEK, Action.DANGLE): kind = random.choice(self.mischief_kinds(edge_ok=False))
+            self.enter(State(action=kind)); return
+        tx, out = spot
+        jump = physics.leap(self.px + self.size / 2, self.py + self.feet, tx, self.wins[wid][1])
+        if jump is None:                                                    # too far to reach in one jump
+            self.enter(State(action=random.choice(self.mischief_kinds(edge_ok=False)))); return
+        self.vx, self.vy = jump; self.support = None
+        self.facing = 1 if tx > self.px + self.size / 2 else -1
+        self.pending_mischief = (kind, self.t + 5.0, out)
+
+    def start_pending_mischief(self, wid):
+        """it has landed on the window it was after: start the mischief (or forget it if it never got there)"""
+        if not self.pending_mischief: return
+        kind, until, out = self.pending_mischief
+        if self.t > until: self.pending_mischief = None
+        elif wid == self.active_id and self.vy >= 0:
+            self.pending_mischief = None
+            if kind in (Action.PEEK, Action.DANGLE): self.facing = out                      # looks out over the edge
+            self.enter(State(action=kind))
 
     # ---- the desktop -----------------------------------------------------
     def desktop_items(self):
@@ -495,10 +561,11 @@ class Pet(QWidget):
         f, sleep = -self.facing, self.state.motion is Motion.SLEEP
         stretch = self.state.action in (Action.STRETCH, Action.PUSH)             # both lean forward
         flip = self.state.action is Action.FLIP
-        key = (self.scale, f, sleep, stretch, flip, tuple((int(x), int(y)) for x, y, _ in self.hearts))
+        lively = self.state.action in (Action.STOMP, Action.PEEK, Action.DANGLE, Action.DANCE)
+        key = (self.scale, f, sleep, stretch, flip, lively, tuple((int(x), int(y)) for x, y, _ in self.hearts))
         if key == self.mask_key: return
         self.mask_key = key
-        region = silhouette(f, sleep, stretch, self.hearts, flip)
+        region = silhouette(f, sleep, stretch, self.hearts, flip, lively)
         self.setMask(region if self.scale == 1 else QTransform().scale(self.scale, self.scale).map(region))
 
     # ---- input -----------------------------------------------------------

@@ -58,7 +58,10 @@
   "sleep": 1,
   "chase": 1,
   "rant": 2,
-  "yawn": 1
+  "yawn": 1,
+  "point": 2,
+  "wag": 2,
+  "lecture": 1
  },
  "chatter": [
   "Làm việc đi!",
@@ -76,5 +79,15 @@
  "desktop_remark": "{name}... nằm chình ình ở đó làm gì?",
  "work_prop": "sign",
  "looks": "left",
- "turn": 0.3
+ "turn": 0.3,
+ "scold": [
+  "Làm việc đi, đừng có lười!",
+  "Nhìn cái gì mà nhìn!",
+  "Sao còn chưa lưu file hả?",
+  "Bỏ cái điện thoại xuống!",
+  "Ngồi thẳng lưng lên!",
+  "Uống nước đi, nói mãi không nghe!",
+  "Deadline đến nơi rồi kìa!",
+  "Cái mặt đó là sao hả?"
+ ]
 }

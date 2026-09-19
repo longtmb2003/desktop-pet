@@ -5,10 +5,10 @@ All drawing is in the definition's own pixel space (`defn.size` square, origin a
 import math
 
 from PySide6.QtCore import QPointF, QRect, QRectF, Qt
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QRegion
+from PySide6.QtGui import QColor, QCursor, QPainter, QPainterPath, QPen, QRegion
 
 from .renderer import heart, star
-from .state import Action, Expression, Motion
+from .state import SCOLDING, Action, Expression, Motion
 
 INK = QColor(24, 22, 26)
 
@@ -17,7 +17,8 @@ def face_kind(pet):
     """which face overlay the pet wears now"""
     s = pet.state
     if s.expression is Expression.HAPPY: return "laugh"
-    if s.expression is Expression.SCARED or s.action in (Action.RANT, Action.YAWN): return "talk"
+    if s.expression is Expression.SCARED or s.action in (Action.RANT, Action.YAWN, *SCOLDING): return "talk"
+    if s.action in (Action.STOMP, Action.DANCE): return "laugh"
     if pet.bubble.isVisible() and s.motion is not Motion.SLEEP: return "talk"       # moves its mouth while its words are up
     return "neutral"
 
@@ -83,6 +84,39 @@ def draw_prop(p, pk, bw, bh, t, mirror):
         for side in (-1, 1): hand(p, QPointF(side * bw * 0.20, top + 2))              # resting on the top edge
 
 
+def cursor(pet):
+    """where the mouse pointer is, in the pet's drawing units with the origin at its feet (so it can point at you)"""
+    c = QCursor.pos() - pet.pos()
+    return c.x() / pet.scale - pet.defn.size / 2, c.y() / pet.scale - pet.defn.feet
+
+
+def finger(p, pk, shoulder, ang, reach, bw):
+    """a sleeved arm from `shoulder` out at angle `ang` (radians, screen: y down), ending in a fist with the index finger out"""
+    d = QPointF(math.cos(ang), math.sin(ang))
+    hand = shoulder + d * reach
+    p.setPen(QPen(pk.coat, max(9.0, bw * 0.13), Qt.SolidLine, Qt.RoundCap)); p.drawLine(shoulder, hand)
+    p.setPen(QPen(SKIN, 5, Qt.SolidLine, Qt.RoundCap)); p.drawLine(hand, hand + d * 15)              # the pointing finger
+    p.setPen(QPen(QColor(150, 105, 80), 1)); p.setBrush(SKIN); p.drawEllipse(hand, 7, 6.5)
+
+
+def draw_scold(p, pk, bw, bh, t, action, pet, dx, dy):
+    """the arm(s) of a scolding character, drawn upright (after the body's own transform): jabbing at the pointer, wagging a raised
+    finger, or gesturing left and right"""
+    sx, sy0, reach = bw * 0.27, -bh * 0.5 - dy, bw * 0.62
+    if action is Action.POINT:
+        cx, cy = cursor(pet)
+        side = 1 if cx >= 0 else -1
+        sh = QPointF(side * sx + dx, sy0)
+        finger(p, pk, sh, math.atan2(cy - sh.y(), cx - sh.x()), reach + 5 * math.sin(t * 12), bw)      # the jab
+    elif action is Action.WAG:
+        sh = QPointF(sx + dx, sy0)
+        finger(p, pk, sh, math.radians(-72 + 24 * math.sin(t * 9)), reach * 0.8, bw)                   # up, and side to side: "no, no, no"
+    else:
+        side = -1 if int(t * 1.6) % 2 else 1
+        a = math.radians(-25 + 12 * math.sin(t * 12))
+        finger(p, pk, QPointF(side * sx + dx, sy0), math.atan2(math.sin(a), side * math.cos(a)), reach, bw)
+
+
 def pose(pet):
     """(dx, dy, rot, sx, sy, spin, lying): where the body is and how it is turned, from what the pet is doing"""
     t, s, pk = pet.t, pet.state, pet.defn.pack
@@ -98,6 +132,12 @@ def pose(pet):
         rot = (10 + 2 * math.sin(t * 14)) * pet.facing
     elif s.action is Action.STRETCH:
         sy += 0.05
+    elif s.action is Action.POINT: rot, dy = 5 * (1 if cursor(pet)[0] >= 0 else -1), abs(math.sin(t * 12)) * 1.5
+    elif s.action is Action.LECTURE: dy, rot = abs(math.sin(t * 6)) * pk.bob * 0.6, math.sin(t * 3) * 4
+    elif s.action is Action.STOMP: dy, sy = abs(math.sin(t * 10)) * pk.bob * 1.8, 1 - 0.1 * max(0, math.cos(t * 10))
+    elif s.action is Action.PEEK: rot = 24 * pet.facing
+    elif s.action is Action.DANGLE: rot, sy = math.sin(t * 4) * 5, 0.96
+    elif s.action is Action.DANCE: rot, dy = math.sin(t * 8) * 12, abs(math.sin(t * 8)) * pk.bob * 1.2
     if s.motion is Motion.DRAG: sy, rot = 1.04, math.sin(t * 6) * 3
     if s.expression is Expression.HAPPY and s.motion is not Motion.DRAG: dy = abs(math.sin(t * 10)) * pk.bob
     if s.expression is Expression.DIZZY and s.motion is not Motion.WALK: rot = math.sin(t * 4) * 9
@@ -137,6 +177,7 @@ def paint_sprite(pet, p):
     p.restore()
     if s.action is Action.WORK: draw_prop(p, pk, bw, bh, t, 1 if mir >= 0 else -1)
     p.resetTransform(); p.scale(pet.scale, pet.scale); p.translate(d.size / 2, d.feet)    # extras: upright, not turned with the body
+    if s.action in SCOLDING: draw_scold(p, pk, bw, bh, t, s.action, pet, dx, dy)
     if lying:
         f = p.font(); f.setBold(True)
         for i in range(3):
@@ -206,10 +247,11 @@ def sprite_mask(pet):
         r = math.hypot(bw, bh) / 2 + 8                                    # its corners sweep this circle about the middle
         region = QRegion(QRectF((c - r) * k, (d.feet - bh / 2 - r) * k, 2 * r * k, 2 * r * k).toRect(), QRegion.Ellipse)
     else:
-        th = math.radians(max(14, pk.sway + 3))                               # the widest lean: the pack's own waddle, or a push
+        th = math.radians(max(26, pk.sway + 3))                               # the widest lean: its own waddle, a push, a peek
         hx = bw / 2                                                           # a body leaning about its feet sweeps this box
         sin, cos = math.sin(th), math.cos(th)
         reach, up, down = hx * cos + bh * sin + 12, bh * cos + hx * sin + pk.bob + 40, hx * sin + 8
+        reach = max(reach, bw * (0.27 + 0.62) + 5 + 15 + 8)                   # ... or an arm stretched out to point at you
         region = QRegion(QRectF((c - reach) * k, (d.feet - up) * k, 2 * reach * k, (up + down) * k).toRect())
     for x, y, _ in pet.hearts: region += QRegion(QRect(round((c + x - 10) * k), round((d.feet + y - 10) * k), round(20 * k), round(20 * k)))
     return region.intersected(QRegion(0, 0, pet.size, pet.size))

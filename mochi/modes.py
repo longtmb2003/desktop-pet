@@ -6,8 +6,9 @@ from dataclasses import dataclass, field
 from .bubble import clean_text
 from .state import BEHAVIOR_NAMES
 
-KEYS = ("activity", "speed", "chase", "chatter", "time_of_day", "sound", "quiet")      # the Settings a mode sets, always all of them
-DEFAULTS = {"activity": 1.0, "speed": 1.0, "chase": True, "chatter": True, "time_of_day": True, "sound": True, "quiet": False}
+KEYS = ("activity", "speed", "chase", "chatter", "time_of_day", "sound", "quiet", "mischief")   # what a mode sets: always all of them
+DEFAULTS = {"activity": 1.0, "speed": 1.0, "chase": True, "chatter": True, "time_of_day": True, "sound": True, "quiet": False,
+            "mischief": True}
 RANGES = {"activity": (0.3, 3.0), "speed": (0.3, 3.0)}
 STAYS = ("sleep", "work")                       # what a mode may keep the pet doing all the time
 MAX_CUSTOM, MAX_NAME = 12, 30
@@ -29,10 +30,10 @@ def make(id, name, stay="", boost=None, builtin=True, **over):
 
 BUILTIN = {m.id: m for m in (
     make("normal", "Bình thường"),
-    make("work", "Làm việc", stay="work", activity=0.5, speed=0.8, chase=False, chatter=False),
+    make("work", "Làm việc", stay="work", activity=0.5, speed=0.8, chase=False, chatter=False, mischief=False),
     make("play", "Chơi đùa", boost={"chase": 4, "walk": 2}, activity=2.0, speed=1.5, chatter=True),
-    make("sleep", "Ngủ", stay="sleep", activity=0.5, chatter=False, sound=False),
-    make("quiet", "Yên lặng", boost={"idle": 2}, activity=0.6, chatter=False, sound=False, quiet=True),
+    make("sleep", "Ngủ", stay="sleep", activity=0.5, chatter=False, sound=False, mischief=False),
+    make("quiet", "Yên lặng", boost={"idle": 2}, activity=0.6, chatter=False, sound=False, quiet=True, mischief=False),
 )}
 
 

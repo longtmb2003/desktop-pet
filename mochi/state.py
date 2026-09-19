@@ -33,6 +33,13 @@ class Action(Enum):
     PUSH = auto()
     WORK = auto()           # sitting at a tiny laptop: what it does during a Pomodoro focus
     RANT = auto()           # talking away (a sprite pet's special action: its face animates while it says something)
+    POINT = auto()          # scolding: jabbing a finger at the user (the mouse pointer)
+    WAG = auto()            # scolding: finger raised, wagging "no, no, no"
+    LECTURE = auto()        # scolding: pacing and gesturing with both hands
+    STOMP = auto()          # mischief on a window: bouncing up and down on it
+    PEEK = auto()           # mischief: leaning over the window's edge to look down
+    DANGLE = auto()         # mischief: sitting on the window's edge, legs swinging
+    DANCE = auto()          # mischief: a little dance
 
 
 @dataclass(frozen=True)
@@ -43,7 +50,11 @@ class State:
 
 
 _ACTION_SECS = {Action.YAWN: (1.8, 1.8), Action.STRETCH: (2.4, 2.4), Action.GROOM: (3, 4.5), Action.CHASE: (5, 9),
-                Action.FLIP: (0.55, 0.55), Action.PUSH: (1.2, 1.8), Action.WORK: (6, 12), Action.RANT: (3.5, 5.5)}
+                Action.FLIP: (0.55, 0.55), Action.PUSH: (1.2, 1.8), Action.WORK: (6, 12), Action.RANT: (3.5, 5.5),
+                Action.POINT: (3, 4.5), Action.WAG: (3, 4.5), Action.LECTURE: (4, 6), Action.STOMP: (2.5, 4), Action.PEEK: (3, 4.5),
+                Action.DANGLE: (4, 7), Action.DANCE: (3, 5)}
+SCOLDING = (Action.POINT, Action.WAG, Action.LECTURE)                          # a character with arms may scold
+MISCHIEF = (Action.STOMP, Action.PEEK, Action.DANGLE, Action.DANCE)             # what it gets up to on the window you are working in
 _MOTION_SECS = {Motion.IDLE: (2, 5), Motion.WALK: (3, 8), Motion.SLEEP: (8, 20)}
 # what the pet may do next: (motion, action) -> weight
 _NEXT = {(Motion.IDLE, Action.NONE): 4, (Motion.WALK, Action.NONE): 3,
@@ -52,7 +63,8 @@ _NEXT = {(Motion.IDLE, Action.NONE): 4, (Motion.WALK, Action.NONE): 3,
 BEHAVIORS = _NEXT                                            # what a pet does when its definition doesn't say otherwise
 BEHAVIOR_NAMES = {"idle": (Motion.IDLE, Action.NONE), "walk": (Motion.WALK, Action.NONE), "sleep": (Motion.SLEEP, Action.NONE),
                   "groom": (Motion.IDLE, Action.GROOM), "yawn": (Motion.IDLE, Action.YAWN), "stretch": (Motion.IDLE, Action.STRETCH),
-                  "chase": (Motion.WALK, Action.CHASE), "rant": (Motion.IDLE, Action.RANT)}      # the names a pet pack may use
+                  "chase": (Motion.WALK, Action.CHASE), "rant": (Motion.IDLE, Action.RANT), "point": (Motion.IDLE, Action.POINT),
+                  "wag": (Motion.IDLE, Action.WAG), "lecture": (Motion.IDLE, Action.LECTURE)}      # the names a pet pack may use
 
 
 def duration(s):
