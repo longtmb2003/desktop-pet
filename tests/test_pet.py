@@ -1,5 +1,6 @@
 import pytest
 
+from mochi import physics
 from mochi.physics import FEET, S
 from mochi.pet import MAX_DT
 from mochi.state import Motion, State
@@ -460,3 +461,61 @@ def test_the_scared_pet_paints_inside_its_mask_and_differs_from_a_calm_fall(pet)
     calm, _ = frame(State(Motion.AIRBORNE))
     assert scared != calm
     assert all(m.contains(QPoint(x, y)) for y in range(S) for x in range(S) if scared.pixel(x, y) >> 24 > 40)
+
+
+# ---- pushing against an edge ----------------------------------------------------------------------------------
+def pushing_setup(pet, monkeypatch, roll):
+    import mochi.pet as mp
+    dizzy_on_a_window(pet)
+    pet.enter(State(Motion.WALK))
+    pet.facing = 1
+    monkeypatch.setattr(mp.random, "random", lambda: roll)
+    monkeypatch.setattr(mp.random, "choice", lambda seq: seq[-1] if seq[0] == -1 else seq[0])   # random facing: towards the edge; else WALK
+
+
+def test_a_walker_can_push_against_the_edge_then_turn_round(pet, monkeypatch):
+    pushing_setup(pet, monkeypatch, 0.45)                                # not a hop (>= 0.4), but a push (< PUSH_CHANCE)
+    run_until(pet, lambda: pet.state.action is Action.PUSH)
+    g = pet.screen_geo()
+    edge_x = pet.px
+    assert pet.state == State(Motion.WALK, action=Action.PUSH) and pet.facing == 1 and pet.support == "w"
+    lo, hi = physics.span(pet.wins, g, "w")
+    assert pet.px + S / 2 == hi                                              # stopped exactly at the edge, not past it
+    for _ in range(10):
+        pet.tick()
+        assert pet.px == edge_x and pet.state.action is Action.PUSH      # it stands still and shoves
+    run_until(pet, lambda: pet.state.action is not Action.PUSH)
+    assert pet.state == State(Motion.WALK) and pet.facing == -1          # then heads back the way it came
+    pet.tick()
+    assert pet.px < edge_x
+
+
+def test_no_push_when_the_roll_says_turn(pet, monkeypatch):
+    pushing_setup(pet, monkeypatch, 0.9)
+    seen = set()
+    run_until(pet, lambda: seen.add(pet.facing) or pet.facing == -1)
+    assert pet.state == State(Motion.WALK)
+
+
+def test_a_dizzy_pet_never_pushes(pet, monkeypatch):
+    pushing_setup(pet, monkeypatch, 0.45)
+    pet.enter(State(Motion.WALK, Expression.DIZZY))
+    for _ in range(120):
+        pet.tick()
+        assert pet.state.action is not Action.PUSH
+
+
+@pytest.mark.parametrize("facing", [1, -1])
+def test_the_pushing_pet_paints_inside_its_mask(pet, facing):
+    from PySide6.QtCore import QPoint
+    from PySide6.QtGui import QImage, QPainter
+    pet.grounded, pet.facing, pet.state = True, facing, State(Motion.WALK, action=Action.PUSH)
+    for k in range(8):
+        pet.t, pet.began, pet.dur = 10.0 + k * 0.05, 10.0, 1.5
+        pet.mask_key = None; pet.update_mask(); m = pet.mask(); pet.clearMask()
+        img = QImage(S, S, QImage.Format_ARGB32); img.fill(0)
+        pt = QPainter(img); pet.render(pt, QPoint(0, 0)); pt.end()
+        for y in range(S):
+            for x in range(S):
+                if img.pixel(x, y) >> 24 > 40:
+                    assert m.contains(QPoint(x, y)), (facing, k, x, y)

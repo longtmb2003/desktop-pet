@@ -13,6 +13,7 @@ from .renderer import THEMES, paint, silhouette
 from .settings import Settings
 from .state import Action, Expression, Motion, State, after, ends_at
 
+PUSH_CHANCE = 0.5                  # of the edge encounters that aren't a hop off, how many are a push against the "wall"
 CLICK_DELAY_MS = 250                # a click waits this long for a second click before it counts as a pet
 MAX_DT = 0.05                       # cap one frame's time step so a stall can't launch the pet through a window
 
@@ -92,10 +93,12 @@ class Pet(QWidget):
                 if self.state.motion is Motion.WALK:
                     if self.state.action is Action.CHASE:
                         self.chase(dt, g, cx, wid)
-                    else:
-                        self.walk(dt, g, cx, wid)
+                    elif self.state.action is Action.NONE:
+                        self.walk(dt, g, cx, wid)                           # (a PUSH stands still)
             if self.t > self.until:
+                edge = self.facing if self.state.action is Action.PUSH else 0
                 self.enter(after(self.state))
+                if edge: self.facing = -edge                                # after shoving the edge, never walk straight back into it
             self.move(int(self.px), int(self.py))
         self.update_mask()
         self.update()
@@ -135,6 +138,10 @@ class Pet(QWidget):
             out = -1 if cx < lo else 1
             if wid is not None and not dizzy and random.random() < 0.4:      # hop off the window edge
                 self.facing, self.vx, self.vy, self.support = out, out * 140, -260, None
+            elif not dizzy and random.random() < PUSH_CHANCE:
+                self.px = (lo if out < 0 else hi) - S / 2                   # stop at the edge and shove against it
+                self.facing = out
+                self.enter(State(Motion.WALK, action=Action.PUSH))
             else:
                 self.facing = -out
 
@@ -146,7 +153,8 @@ class Pet(QWidget):
 
     def update_mask(self):
         # clip the window to the pet's silhouette so clicks pass through the transparent rest
-        f, sleep, stretch = -self.facing, self.state.motion is Motion.SLEEP, self.state.action is Action.STRETCH
+        f, sleep = -self.facing, self.state.motion is Motion.SLEEP
+        stretch = self.state.action in (Action.STRETCH, Action.PUSH)             # both lean forward
         flip = self.state.action is Action.FLIP
         key = (f, sleep, stretch, flip, tuple((int(x), int(y)) for x, y, _ in self.hearts))
         if key == self.mask_key: return

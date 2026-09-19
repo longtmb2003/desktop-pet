@@ -63,3 +63,12 @@ def test_airborne_and_drag_never_time_out_even_when_dizzy():
     assert duration(State(Motion.AIRBORNE, Expression.DIZZY)) is None
     assert duration(State(Motion.DRAG, Expression.DIZZY)) is None
     assert ends_at(State(Motion.AIRBORNE, Expression.DIZZY), 3.0) == math.inf
+
+
+def test_push_is_a_short_one_shot_and_ends_by_turning_round_or_sitting():
+    s = State(Motion.WALK, action=Action.PUSH)
+    lo, hi = duration(s)
+    assert 1 <= lo <= hi <= 2                                     # long enough to read as a shove, short enough not to be a stall
+    ends = {after(s, random.Random(i)) for i in range(50)}
+    assert ends == {State(Motion.WALK), State(Motion.IDLE)}
+    assert all(pick_next(State(), RNG).action is not Action.PUSH for _ in range(200))    # only ever started by reaching an edge

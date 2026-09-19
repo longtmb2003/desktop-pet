@@ -70,6 +70,7 @@ def paint(pet, p):
     if act is Action.STRETCH: sy -= .14 * o; tilt = 4 * o; shift = 8 * o                           # stretch forward, bum up
     elif act is Action.YAWN: sy += .05 * o; tilt = -5 * o
     elif act is Action.CHASE: hop = abs(math.sin(t * 14)) * 9
+    elif act is Action.PUSH: tilt = 9 + 2 * math.sin(t * 14); shift = 3               # leaning into the wall, shoving
     if scared: shift += math.sin(t * 45) * 1.5                                                    # trembling
     sy -= pet.squash
     sx = 2 - sy if not drag else .94        # keep volume: taller = thinner
@@ -121,7 +122,7 @@ def paint(pet, p):
             blob(DARK, x + lx * .4, -46 + ly * .4, 2.5, 3); continue
         if dizzy:                                                          # X eyes
             arc = QPainterPath(QPointF(x - 6, -52)); arc.lineTo(x + 6, -40); arc.moveTo(x + 6, -52); arc.lineTo(x - 6, -40)
-        elif sleep or act in (Action.YAWN, Action.STRETCH, Action.GROOM) or pet.blink > 0:
+        elif sleep or act in (Action.YAWN, Action.STRETCH, Action.GROOM, Action.PUSH) or pet.blink > 0:
             arc = QPainterPath(QPointF(x - 7, -46)); arc.quadTo(x, -40, x + 7, -46)
         elif happy:
             arc = QPainterPath(QPointF(x - 7, -43)); arc.quadTo(x, -53, x + 7, -43)
@@ -135,11 +136,14 @@ def paint(pet, p):
     elif drag: blob(DARK, 0, -35, 3, 4)
     elif happy: blob(PINK.darker(130), 0, -35, 4, 4.5)
     elif dizzy: blob(PINK.darker(150), 0, -34, 3.5, 3)
+    elif act is Action.PUSH: blob(PINK.darker(150), 0, -34, 5, 2.5)
     elif act is Action.YAWN: blob(PINK.darker(150), 0, -33, 4 + 3 * o, 2 + 8 * o)
     else:
         mouth = QPainterPath(QPointF(-5, -38)); mouth.quadTo(-2.5, -33, 0, -38); mouth.quadTo(2.5, -33, 5, -38)
         p.setPen(QPen(DARK, 2, Qt.SolidLine, Qt.RoundCap)); p.setBrush(Qt.NoBrush); p.drawPath(mouth)
 
+    if act is Action.PUSH:                                           # both paws flat against the wall in front
+        for dy in (-30, -16): blob(TAIL, -50 + 1.5 * math.sin(t * 14), dy, 8, 9)
     if act is Action.GROOM:                                          # lick a paw, stroke the cheek
         lift = (.5 + .5 * math.sin(t * 9)) * min(1, o * 3)
         blob(TAIL, 27 - 5 * lift, -16 - 22 * lift, 8, 10)

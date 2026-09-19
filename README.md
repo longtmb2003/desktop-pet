@@ -16,6 +16,7 @@
 - Bấm một lần: pet nhảy lên và bay trái tim (chờ 0,25 giây xem có bấm lần hai không). Bấm đúp: pet lộn một vòng 360° trên không
 - Lắc mạnh pet khi đang giữ: pet chóng mặt ngay trong tay bạn
 - Cửa sổ đang đứng biến mất (đóng, thu nhỏ, sang màn hình ảo khác): pet hoảng sợ (mắt tròn to, đạp chân, giọt mồ hôi) và rơi ngay
+- Đi tới mép cửa sổ/màn hình, đôi khi pet nhắm mắt tì hai chân trước đẩy vào "bức tường" một lúc rồi quay lại hoặc ngồi xuống
 - Click xuyên qua phần trong suốt quanh pet
 - 5 màu (Kem, Cam, Xám, Bạc hà, Hồng), được nhớ cho lần chạy sau
 - Chuột phải: Màu / Ngủ / Gọi về / Tạm dừng / Tự chạy khi đăng nhập / Thoát
