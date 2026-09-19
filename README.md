@@ -17,7 +17,7 @@ Cần Python 3 và PySide6:
 
 ```sh
 pip install PySide6
-python3 pet.py
+python3 -m mochi
 ```
 
 Tự chạy khi đăng nhập KDE: tạo `~/.config/autostart/mochi-pet.desktop` với `Exec=python3 /đường/dẫn/pet.py`.
