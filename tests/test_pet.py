@@ -566,3 +566,79 @@ def test_a_random_remark_turns_up_now_and_then_when_idle(pet, monkeypatch):
     monkeypatch.setattr("mochi.pet.random.choice", lambda seq: seq[0])
     pet.tick()
     assert pet.bubble.isVisible() and pet.next_chat > pet.t + 100       # and the next one is minutes away, not seconds
+
+
+# ---- pomodoro --------------------------------------------------------------------------------------------------
+class Clock:
+    def __init__(self): self.t = 1000.0
+    def __call__(self): return self.t
+
+
+def pomodoro_pet(pet, monkeypatch):
+    import mochi.pet as mp
+    chimes = []
+    monkeypatch.setattr(mp, "chime", lambda: chimes.append(1))
+    clock = Clock(); pet.pomo.clock = clock
+    on_the_floor(pet)
+    return clock, chimes
+
+
+def test_focus_puts_the_pet_at_its_laptop_and_keeps_it_there(pet, monkeypatch):
+    clock, _ = pomodoro_pet(pet, monkeypatch)
+    pet.start_focus(25)
+    assert pet.state == State(action=Action.WORK) and pet.pomo.focusing and pet.bubble.lines == "Tập trung nào! 25 phút"
+    for _ in range(int(40 / 0.033)):                                     # 40 s: several WORK timeouts, never wandering off
+        pet.tick()
+        assert pet.state.action is Action.WORK
+
+
+def test_pausing_or_resetting_lets_the_pet_go_back_to_normal_life(pet, monkeypatch):
+    clock, _ = pomodoro_pet(pet, monkeypatch)
+    pet.start_focus(25); pet.pomo.pause()
+    run_until(pet, lambda: pet.state.action is not Action.WORK)
+    assert not pet.pomo.focusing
+
+
+def test_the_end_of_focus_announces_chimes_and_starts_the_break(pet, monkeypatch):
+    clock, chimes = pomodoro_pet(pet, monkeypatch)
+    pet.start_focus(1)
+    pet.bubble.dismiss()
+    clock.t += 61; pet.tick()
+    assert pet.pomo.phase == "break" and "Hết giờ tập trung" in pet.bubble.lines and chimes == [1]
+    assert pet.state.expression is Expression.HAPPY
+    clock.t += 400; pet.tick()
+    assert not pet.pomo.active and chimes == [1, 1]
+    assert pet.state.action is not Action.WORK                           # no laptop during the break or afterwards
+
+
+def test_no_chime_in_quiet_mode_or_with_sound_off_but_the_bubble_still_shows(pet, monkeypatch):
+    clock, chimes = pomodoro_pet(pet, monkeypatch)
+    pet.cfg.quiet = True
+    pet.start_focus(1); pet.bubble.dismiss(); clock.t += 61; pet.tick()
+    assert chimes == [] and "Hết giờ" in pet.bubble.lines               # explicit user-requested notice is still shown
+    pet.cfg.quiet, pet.cfg.sound = False, False
+    pet.bubble.dismiss(); pet.pomo.reset(); pet.start_focus(1); clock.t += 61; pet.tick()
+    assert chimes == []
+
+
+def test_starting_focus_while_airborne_does_not_freeze_the_fall(pet, monkeypatch):
+    pomodoro_pet(pet, monkeypatch)
+    pet.enter(State(Motion.AIRBORNE)); pet.grounded = False
+    pet.start_focus(25)
+    assert pet.state == State(Motion.AIRBORNE)
+    run_until(pet, lambda: pet.state.motion is not Motion.AIRBORNE)
+    assert pet.pomo.focusing
+
+
+def test_the_laptop_pose_paints_inside_its_mask(pet):
+    from PySide6.QtCore import QPoint
+    from PySide6.QtGui import QImage, QPainter
+    pet.grounded, pet.state = True, State(action=Action.WORK)
+    for facing in (1, -1):
+        pet.facing = facing
+        for k in range(6):
+            pet.t, pet.began, pet.dur = 10 + k * 0.07, 10.0, 8.0
+            pet.mask_key = None; pet.update_mask(); m = pet.mask(); pet.clearMask()
+            img = QImage(S, S, QImage.Format_ARGB32); img.fill(0)
+            pt = QPainter(img); pet.render(pt, QPoint(0, 0)); pt.end()
+            assert all(m.contains(QPoint(x, y)) for y in range(S) for x in range(S) if img.pixel(x, y) >> 24 > 40)

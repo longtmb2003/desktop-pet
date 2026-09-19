@@ -9,9 +9,11 @@ from PySide6.QtWidgets import QApplication, QMenu, QWidget
 
 from . import autostart, physics
 from .bubble import SpeechBubble
+from .pomodoro import Pomodoro
 from .physics import FEET, IMPACT_DIZZY, S, THROW_MIN, WALK_SPEED, Bounds, DragTracker
 from .renderer import THEMES, paint, silhouette
 from .settings import Settings
+from .sound import chime
 from .state import Action, Expression, Motion, State, after, ends_at
 
 PUSH_CHANCE = 0.5                  # of the edge encounters that aren't a hop off, how many are a push against the "wall"
@@ -37,6 +39,7 @@ class Pet(QWidget):
         self.px, self.py = random.uniform(g.left + 80, g.right - 240), g.top - 100
         self.enter(State(Motion.AIRBORNE))
         self.clock = QElapsedTimer(); self.clock.start()   # real frame time, see tick()
+        self.pomo = Pomodoro()
         self.bubble, self.fullscreen = SpeechBubble(), False    # fullscreen: pushed by the platform (kwin.js)
         self.next_chat = random.uniform(60, 180)
         self.click_timer = QTimer(self, singleShot=True, interval=CLICK_DELAY_MS, timeout=self.pet_it)
@@ -102,15 +105,31 @@ class Pet(QWidget):
                         self.walk(dt, g, cx, wid)                           # (a PUSH stands still)
             if self.t > self.until:
                 edge = self.facing if self.state.action is Action.PUSH else 0
-                self.enter(after(self.state))
+                nxt = after(self.state)
+                self.enter(State(action=Action.WORK) if self.pomo.focusing and self.grounded else nxt)   # focus: back to the laptop
                 if edge: self.facing = -edge                                # after shoving the edge, never walk straight back into it
             self.move(int(self.px), int(self.py))
+        if self.pomo.active: self.pomodoro_event(self.pomo.poll())
         if self.t > self.next_chat:
             self.next_chat = self.t + random.uniform(120, 300)
             if self.state.motion in (Motion.IDLE, Motion.WALK): self.say(random.choice(CHATTER), chatter=True)
         if self.bubble.isVisible(): self.bubble.follow(self.px, self.py, self.screen_geo())
         self.update_mask()
         self.update()
+
+    def start_focus(self, minutes=None):
+        """begin a Pomodoro: `minutes` of focus (default from Settings), then a break"""
+        self.pomo.start((minutes or self.cfg.focus_min) * 60, self.cfg.break_min * 60)
+        self.say(f"Tập trung nào! {minutes or self.cfg.focus_min} phút", urgent=True)
+        if self.grounded and self.state.motion in (Motion.IDLE, Motion.WALK, Motion.SLEEP): self.enter(State(action=Action.WORK))
+
+    def pomodoro_event(self, ev):
+        if ev is None: return
+        msg = {"focus_done": f"Hết giờ tập trung! Nghỉ {self.cfg.break_min} phút nhé", "break_done": "Hết giờ nghỉ, làm tiếp nào?"}[ev]
+        self.say(msg, urgent=True)
+        if self.cfg.sound and not self.quiet: chime()
+        if ev == "focus_done" and self.grounded and self.state.motion in (Motion.IDLE, Motion.WALK):
+            self.enter(State(expression=Expression.HAPPY))
 
     @property
     def quiet(self):
@@ -237,6 +256,12 @@ class Pet(QWidget):
             a = colors.addAction(name)
             a.setCheckable(True); a.setChecked(name == self.theme)
             a.triggered.connect(lambda _, n=name: self.set_theme(n))
+        pm = m.addMenu("Pomodoro")
+        pm.addAction(self.pomo.label()).setEnabled(False)
+        if not self.pomo.active: pm.addAction(f"Bắt đầu ({self.cfg.focus_min} phút)", self.start_focus)
+        elif self.pomo.paused: pm.addAction("Tiếp tục", self.pomo.resume)
+        else: pm.addAction("Tạm dừng", self.pomo.pause)
+        if self.pomo.active: pm.addAction("Đặt lại", self.pomo.reset)
         m.addAction("Ngủ", lambda: self.enter(State(Motion.SLEEP)))
         m.addAction("Gọi về", self.bring_back)
         a = m.addAction("Tạm dừng"); a.setCheckable(True); a.setChecked(self.paused); a.toggled.connect(self.set_paused)

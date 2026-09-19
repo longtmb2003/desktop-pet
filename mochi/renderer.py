@@ -115,6 +115,7 @@ def paint(pet, p):
     for m in (-1, 1): blob(QColor(255, 157, 176, 120), m * 31, -37, 8, 4.5)
     cur = QCursor.pos() - pet.pos() - QPoint(S // 2, FEET - 46)                 # eyes follow the cursor
     lx, ly = max(-1, min(1, cur.x() / 250)) * -2.5 * pet.facing, max(-1, min(1, cur.y() / 250)) * 1.5
+    if act is Action.WORK: lx, ly = 0, 3                                       # eyes on the screen, not on the cursor
     pen = QPen(DARK, 3, Qt.SolidLine, Qt.RoundCap)
     for x in (-19, 19):
         if scared:                                                         # wide eyes, tiny pupils
@@ -144,6 +145,10 @@ def paint(pet, p):
 
     if act is Action.PUSH:                                           # both paws flat against the wall in front
         for dy in (-30, -16): blob(TAIL, -50 + 1.5 * math.sin(t * 14), dy, 8, 9)
+    if act is Action.WORK:                                           # the back of a tiny laptop, paws tapping on top
+        p.setPen(QPen(QColor(90, 96, 110), 2)); p.setBrush(QColor(176, 184, 198)); p.drawRoundedRect(QRectF(-27, -31, 54, 31), 4, 4)
+        p.setPen(Qt.NoPen); p.setBrush(QColor(236, 240, 246)); p.drawEllipse(QPointF(0, -15), 4, 4)
+        for i, m in enumerate((-1, 1)): blob(TAIL, m * 15, -32 - max(0, math.sin(t * 15 + i * math.pi)) * 3, 7, 6)
     if act is Action.GROOM:                                          # lick a paw, stroke the cheek
         lift = (.5 + .5 * math.sin(t * 9)) * min(1, o * 3)
         blob(TAIL, 27 - 5 * lift, -16 - 22 * lift, 8, 10)

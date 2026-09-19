@@ -31,6 +31,7 @@ class Action(Enum):
     CHASE = auto()
     FLIP = auto()
     PUSH = auto()
+    WORK = auto()           # sitting at a tiny laptop: what it does during a Pomodoro focus
 
 
 @dataclass(frozen=True)
@@ -41,7 +42,7 @@ class State:
 
 
 _ACTION_SECS = {Action.YAWN: (1.8, 1.8), Action.STRETCH: (2.4, 2.4), Action.GROOM: (3, 4.5), Action.CHASE: (5, 9),
-                Action.FLIP: (0.55, 0.55), Action.PUSH: (1.2, 1.8)}
+                Action.FLIP: (0.55, 0.55), Action.PUSH: (1.2, 1.8), Action.WORK: (6, 12)}
 _MOTION_SECS = {Motion.IDLE: (2, 5), Motion.WALK: (3, 8), Motion.SLEEP: (8, 20)}
 # what the pet may do next: (motion, action) -> weight
 _NEXT = {(Motion.IDLE, Action.NONE): 4, (Motion.WALK, Action.NONE): 3, (Motion.SLEEP, Action.NONE): 1,
