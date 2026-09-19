@@ -14,6 +14,7 @@ from .pomodoro import Pomodoro
 from .physics import FEET, IMPACT_DIZZY, S, THROW_MIN, WALK_SPEED, Bounds, DragTracker
 from .renderer import THEMES, paint, silhouette
 from .settings import Settings
+from .settings_dialog import SettingsDialog
 from .sound import chime
 from .state import Action, Expression, Motion, State, after, ends_at
 
@@ -128,6 +129,15 @@ class Pet(QWidget):
         (it is never nudged to sleep while being handled)"""
         return self.now_hour() if self.cfg.time_of_day and self.t - self.last_touch > 60 else None
 
+    def apply_settings(self):
+        """a setting changed: bring the running pet in line (CPU watching, frame rate)"""
+        self.sync_monitor()
+        self.retune()
+
+    def open_settings(self):
+        if getattr(self, "dialog", None) is None: self.dialog = SettingsDialog(self)
+        self.dialog.show(); self.dialog.raise_(); self.dialog.activateWindow()
+
     def sync_monitor(self):
         """start or stop CPU watching to match the setting (and whether psutil is there at all)"""
         if self.cfg.monitor and monitor.AVAILABLE:
@@ -180,6 +190,7 @@ class Pet(QWidget):
 
     def closeEvent(self, e):
         self.bubble.close()
+        if getattr(self, "dialog", None) is not None: self.dialog.close()
         super().closeEvent(e)
 
     def throw(self, vx, vy):
@@ -300,6 +311,9 @@ class Pet(QWidget):
         elif self.pomo.paused: pm.addAction("Tiếp tục", self.pomo.resume)
         else: pm.addAction("Tạm dừng", self.pomo.pause)
         if self.pomo.active: pm.addAction("Đặt lại", self.pomo.reset)
+        a = m.addAction("Chế độ yên lặng"); a.setCheckable(True); a.setChecked(self.cfg.quiet)
+        a.toggled.connect(lambda on: (setattr(self.cfg, "quiet", on), self.apply_settings()))
+        m.addAction("Cài đặt...", self.open_settings)
         m.addAction("Ngủ", lambda: self.enter(State(Motion.SLEEP)))
         m.addAction("Gọi về", self.bring_back)
         a = m.addAction("Tạm dừng"); a.setCheckable(True); a.setChecked(self.paused); a.toggled.connect(self.set_paused)
