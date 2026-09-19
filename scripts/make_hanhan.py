@@ -1,6 +1,9 @@
 """Build the Hà Nhân sprite pack into mochi/pets/packs/hanhan/ from the two source images in packaging/:
   "hà nhân.jpg"              the whole figure on white   -> body.png (white background cut out, own face blanked) + faces/neutral.png
   "biểu cảm mặt hà nhân.png" a 5x5 sheet of head frames  -> faces/talk_*.png (frames 3911-3929) and faces/laugh_*.png (3930-3935)
+  "Hà Nhân chạy xe"          him on a tricycle (and a close-up head)  -> ride.png (background cut, stray "+" mark removed)
+  the body again with the arm(s) that are tucked behind his back cut away -> free_left.png, free_right.png, free_both.png, used
+  while he draws his own arm (pointing, holding a sign) so that there aren't two arms
 Faces become transparent ink overlays (dark strokes; the alpha is the darkness) registered to the body's own face, so any expression
 can be laid over the blank head. Run from anywhere:  python scripts/make_hanhan.py  [--preview out.png]"""
 import json
@@ -8,13 +11,25 @@ import sys
 from collections import deque
 from pathlib import Path
 
-from PySide6.QtCore import QRect, QRectF, Qt
-from PySide6.QtGui import QColor, QGuiApplication, QImage, QPainter
+from PySide6.QtCore import QPointF, QRect, QRectF, Qt
+from PySide6.QtGui import QColor, QGuiApplication, QImage, QPainter, QPen, QPolygonF
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC_BODY, SRC_SHEET = ROOT / "packaging" / "hà nhân.jpg", ROOT / "packaging" / "biểu cảm mặt hà nhân.png"
+SRC_RIDE = ROOT / "packaging" / "Hà Nhân chạy xe"
 OUT = ROOT / "mochi" / "pets" / "packs" / "hanhan"
 
+# The arms behind his back are the two rounded bulges at the sides of the coat (in the cropped body image). To free an arm, everything
+# beyond the straight line that the coat edge would follow without it is erased, and that line is drawn as the new coat edge.
+ARM_CUT = {"left": ((152, 352), (126, 557), (60, 340), (60, 575)), "right": ((332, 345), (350, 562), (460, 335), (460, 580))}
+EDGE_INK = QColor(28, 34, 48)
+RIDER_X = 470                                       # the tricycle rider is left of this in the sheet, a close-up head is right of it
+STRAY_MARK = (225, 227, 8)                          # a small "+" drawn on the rider's face in the source: (x, y, radius) to whiten
+# wheels of the tricycle in the source image: centre and radii of the tyre, the orange rim, the hub the spokes turn about, and shapes
+# (the rider's shoe) that lie over the rim and must not be painted over
+WHEELS = ({"x": 235, "y": 410, "rx": 36, "ry": 41, "rim_x": 232, "rim_y": 411, "rim_rx": 24, "rim_ry": 29, "hub": [236, 413],
+           "avoid": [[205, 393], [262, 380], [274, 395], [258, 440], [226, 436], [208, 420]]},
+          {"x": 393, "y": 410, "rx": 32, "ry": 38, "rim_x": 397, "rim_y": 410, "rim_rx": 22, "rim_ry": 29, "hub": [405, 410], "avoid": []})
 BG_LUM = 232                                        # brighter than this and connected to the border = background
 BODY_FACE = (190, 222, 380, 398)                    # search area for the body's own face ink (x0, y0, x1, y1), inside the head outline
 TILE_FACE = (14, 50, 70, 108)                       # the same for a sheet tile, after mirroring it (the sheet faces the other way)
@@ -120,6 +135,13 @@ def main():
 
     (OUT / "faces").mkdir(parents=True, exist_ok=True)
     body.save(str(OUT / "body.png"))
+    ride, (ox, oy) = ride_sprite()
+    ride.save(str(OUT / "ride.png"))
+    wheels = [{**w, "x": w["x"] - ox, "y": w["y"] - oy, "rim_x": w["rim_x"] - ox, "rim_y": w["rim_y"] - oy,
+               "hub": [w["hub"][0] - ox, w["hub"][1] - oy], "avoid": [[a - ox, b - oy] for a, b in w["avoid"]]} for w in WHEELS]
+    free = {"left": "free_left.png", "right": "free_right.png", "both": "free_both.png"}
+    for key, sides in (("left", ("left",)), ("right", ("right",)), ("both", ("left", "right"))):
+        free_arms(body, sides).save(str(OUT / free[key]))
     files = {}
     for kind, frames in faces.items():
         files[kind] = []
@@ -128,7 +150,10 @@ def main():
             f.save(str(OUT / name)); files[kind].append(name)
     (OUT / "pack.json").write_text(json.dumps({
         "id": "hanhan", "name": "Hà Nhân", "size": 240, "feet": 232, "height": 200, "walk_speed": 42,
-        "body": "body.png", "face": {"box": list(box)}, "faces": files, "fps": {"talk": 12, "laugh": 8},
+        "body": "body.png", "body_free": free,
+        "ride": {"image": "ride.png", "height": 170, "speed": 2.0, "wheels": wheels,
+                 "lines": ["Ting ting!", "Tránh ra, tránh ra!", "Vù vù~", "Đừng cản đường tôi!"]},
+        "face": {"box": list(box)}, "faces": files, "fps": {"talk": 12, "laugh": 8},
         "behaviors": {"idle": 4, "walk": 4, "sleep": 1, "chase": 1, "rant": 2, "yawn": 1, "point": 2, "wag": 2, "lecture": 1},
         "scold": ["Làm việc đi, đừng có lười!", "Nhìn cái gì mà nhìn!", "Sao còn chưa lưu file hả?", "Bỏ cái điện thoại xuống!",
                   "Ngồi thẳng lưng lên!", "Uống nước đi, nói mãi không nghe!", "Deadline đến nơi rồi kìa!", "Cái mặt đó là sao hả?"],
@@ -139,6 +164,39 @@ def main():
     print("wrote", OUT, "body", body.width(), "x", body.height(), "box", box)
     if "--preview" in sys.argv:
         preview(body, box, faces, Path(sys.argv[sys.argv.index("--preview") + 1]))
+
+
+def free_arms(body, sides):
+    """a copy of `body` with the arm(s) named in `sides` ("left", "right": as the picture shows them) cut away, leaving a clean edge"""
+    out = body.copy()
+    p = QPainter(out)
+    p.setCompositionMode(QPainter.CompositionMode_Clear)
+    for side in sides:
+        (x0, y0), (x1, y1), (fx, fy), (bx, by) = ARM_CUT[side]
+        poly = QPolygonF([QPointF(x0, y0), QPointF(fx, fy), QPointF(bx, by), QPointF(x1, y1)])
+        p.setBrush(Qt.black); p.setPen(Qt.NoPen); p.drawPolygon(poly)
+    p.setCompositionMode(QPainter.CompositionMode_SourceOver)
+    p.setRenderHint(QPainter.Antialiasing)
+    p.setPen(QPen(EDGE_INK, 5, Qt.SolidLine, Qt.RoundCap))
+    for side in sides:
+        (x0, y0), (x1, y1) = ARM_CUT[side][:2]
+        p.drawLine(QPointF(x0, y0), QPointF(x1, y1))
+    p.end()
+    return out
+
+
+def ride_sprite():
+    """the tricycle rider from the sheet: background cut away, the stray mark whitened; returns (image, crop origin)"""
+    src = QImage(str(SRC_RIDE)).convertToFormat(QImage.Format_ARGB32)
+    cx, cy, cr = STRAY_MARK
+    for y in range(cy - cr, cy + cr + 1):
+        for x in range(cx - cr, cx + cr + 1):
+            if (x - cx) ** 2 + (y - cy) ** 2 <= cr * cr and lum(src.pixel(x, y)) < 170: src.setPixel(x, y, 0xFFFFFFFF)
+    cut = cut_background(src)
+    pts = [(x, y) for y in range(cut.height()) for x in range(RIDER_X) if cut.pixel(x, y) >> 24]
+    x0, y0 = min(p[0] for p in pts) - 1, min(p[1] for p in pts) - 1
+    x1, y1 = max(p[0] for p in pts) + 2, max(p[1] for p in pts) + 2
+    return cut.copy(QRect(x0, y0, x1 - x0, y1 - y0)), (x0, y0)
 
 
 def tile(sheet, n):

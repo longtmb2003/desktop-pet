@@ -6,6 +6,79 @@
  "height": 200,
  "walk_speed": 42,
  "body": "body.png",
+ "body_free": {
+  "left": "free_left.png",
+  "right": "free_right.png",
+  "both": "free_both.png"
+ },
+ "ride": {
+  "image": "ride.png",
+  "height": 170,
+  "speed": 2.0,
+  "wheels": [
+   {
+    "x": 102,
+    "y": 310,
+    "rx": 36,
+    "ry": 41,
+    "rim_x": 99,
+    "rim_y": 311,
+    "rim_rx": 24,
+    "rim_ry": 29,
+    "hub": [
+     103,
+     313
+    ],
+    "avoid": [
+     [
+      72,
+      293
+     ],
+     [
+      129,
+      280
+     ],
+     [
+      141,
+      295
+     ],
+     [
+      125,
+      340
+     ],
+     [
+      93,
+      336
+     ],
+     [
+      75,
+      320
+     ]
+    ]
+   },
+   {
+    "x": 260,
+    "y": 310,
+    "rx": 32,
+    "ry": 38,
+    "rim_x": 264,
+    "rim_y": 310,
+    "rim_rx": 22,
+    "rim_ry": 29,
+    "hub": [
+     272,
+     310
+    ],
+    "avoid": []
+   }
+  ],
+  "lines": [
+   "Ting ting!",
+   "Tránh ra, tránh ra!",
+   "Vù vù~",
+   "Đừng cản đường tôi!"
+  ]
+ },
  "face": {
   "box": [
    69,
@@ -63,6 +136,16 @@
   "wag": 2,
   "lecture": 1
  },
+ "scold": [
+  "Làm việc đi, đừng có lười!",
+  "Nhìn cái gì mà nhìn!",
+  "Sao còn chưa lưu file hả?",
+  "Bỏ cái điện thoại xuống!",
+  "Ngồi thẳng lưng lên!",
+  "Uống nước đi, nói mãi không nghe!",
+  "Deadline đến nơi rồi kìa!",
+  "Cái mặt đó là sao hả?"
+ ],
  "chatter": [
   "Làm việc đi!",
   "Sao còn chưa lưu file?",
@@ -73,21 +156,11 @@
   "Nghỉ mắt tí đi, đỏ hết rồi kìa"
  ],
  "scream": "Trời ơi!",
- "sway": 4,
- "bob": 5,
  "drop": "Cái gì đây? {name}",
  "desktop_remark": "{name}... nằm chình ình ở đó làm gì?",
+ "sway": 4,
+ "bob": 5,
  "work_prop": "sign",
  "looks": "left",
- "turn": 0.3,
- "scold": [
-  "Làm việc đi, đừng có lười!",
-  "Nhìn cái gì mà nhìn!",
-  "Sao còn chưa lưu file hả?",
-  "Bỏ cái điện thoại xuống!",
-  "Ngồi thẳng lưng lên!",
-  "Uống nước đi, nói mãi không nghe!",
-  "Deadline đến nơi rồi kìa!",
-  "Cái mặt đó là sao hả?"
- ]
+ "turn": 0.3
 }

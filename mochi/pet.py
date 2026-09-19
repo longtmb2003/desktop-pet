@@ -18,7 +18,7 @@ from .physics import IMPACT_DIZZY, THROW_MIN, Bounds, DragTracker
 from .renderer import THEMES, paint, silhouette
 from .settings import Settings
 from .settings_dialog import SettingsDialog
-from .sprite import paint_sprite, sprite_mask, sprite_mask_key
+from .sprite import paint_sprite, riding, sprite_mask, sprite_mask_key
 from .sound import chime
 from .state import SCOLDING, Action, Expression, Motion, State, after, ends_at
 
@@ -80,6 +80,9 @@ class Pet(QWidget):
         if state.motion is Motion.WALK and state.action is Action.NONE:
             self.facing = random.choice((-1, 1))
         if state.action is Action.RANT and hasattr(self, "bubble"): self.say(random.choice(self.defn.chatter), chatter=True)
+        on_bike = state.motion is Motion.WALK and state.action is Action.NONE and hasattr(self, "bubble") and riding(self)
+        if on_bike and random.random() < 0.3:
+            self.say(random.choice(self.defn.pack.ride.lines or ("Ting ting!",)), chatter=True)          # ringing its bell
         if state.action in SCOLDING and hasattr(self, "bubble"): self.say(random.choice(self.defn.scold or ("Làm việc đi!",)), chatter=True)
 
     def fit_size(self):
@@ -104,6 +107,10 @@ class Pet(QWidget):
         c = QPoint(int(getattr(self, "px", 0)) + self.size // 2, int(getattr(self, "py", 0)) + self.feet)
         r = (QGuiApplication.screenAt(c) or QGuiApplication.primaryScreen()).availableGeometry()
         return Bounds(r.left(), r.top(), r.right(), r.bottom())
+
+    def ride_boost(self):
+        """how much faster it goes while it is on its tricycle"""
+        return self.defn.ride_speed if riding(self) else 1.0
 
     def turning(self):
         return self.t - self.turn_start < self.defn.turn_s
@@ -522,12 +529,12 @@ class Pet(QWidget):
             self.enter(State(expression=Expression.HAPPY))         # caught it!
             return
         self.facing = 1 if dx > 0 else -1
-        self.px += self.facing * 2 * self.walk_speed * self.cfg.speed * dt
+        self.px += self.facing * 2 * self.walk_speed * self.cfg.speed * self.ride_boost() * dt
 
     def walk(self, dt, g, cx, wid):
         if self.turning(): return                                     # it doesn't shuffle sideways while turning round
         dizzy = self.state.expression is Expression.DIZZY
-        step = self.facing * self.walk_speed * self.cfg.speed * (0.6 if self.hot else 1) * dt      # too hot to hurry
+        step = self.facing * self.walk_speed * self.cfg.speed * (0.6 if self.hot else 1) * self.ride_boost() * dt      # (too hot to hurry)
         if dizzy:                                                                # half speed, swaying, changing its mind
             step = step / 2 + math.sin(self.t * 7) * 40 * dt
             if random.random() < 0.02: self.facing = -self.facing

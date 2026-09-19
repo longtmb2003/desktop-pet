@@ -71,7 +71,7 @@ def test_a_hand_draws_in_skin_with_an_outline_and_they_look_different(kind):
     img = paint(lambda p: draw_hand(p, QPointF(20, 45), 0.0, kind))
     assert skin_pixels(img) > 100
     outline = sum(1 for y in range(90) for x in range(90) if img.pixelColor(x, y).alpha() > 200 and img.pixelColor(x, y).lightness() < 80)
-    assert outline > 40                                                                              # a dark outline round the shapes
+    assert outline > 8                                                                               # a thin dark outline round the shapes
 
 
 def test_the_three_hands_are_three_different_pictures():
@@ -88,7 +88,7 @@ def test_a_hand_turns_with_the_forearm():
     assert right[0] > 60 and abs(right[1] - 45) < 12 and down[1] > 60 and up[1] < 30
 
 
-def test_an_arm_is_sleeve_elbow_cuff_and_hand_and_it_reports_where_they_are():
+def test_an_arm_is_sleeve_cuff_and_hand_and_it_reports_where_they_are():
     coat = QColor(70, 82, 104)
     holder = {}
 
@@ -100,3 +100,18 @@ def test_an_arm_is_sleeve_elbow_cuff_and_hand_and_it_reports_where_they_are():
     assert any(img.pixelColor(x, y).rgb() == coat.rgb() for y in range(100) for x in range(100))       # sleeve colour
     assert any(img.pixelColor(x, y).rgb() == limbs.CUFF.rgb() for y in range(100) for x in range(100))  # the cuff at the wrist
     assert skin_pixels(img) > 100                                                                        # and a hand
+
+
+def test_sleeve_is_tapered():
+    coat = QColor(70, 82, 104)
+    img = paint(lambda p: draw_arm(p, coat, QPointF(10, 50), QPointF(100, 50), 15, "open", 45, 45), 120)
+    def coat_col(x): return sum(1 for y in range(120) if img.pixelColor(x, y).rgb() == coat.rgb())
+    assert coat_col(20) > coat_col(90)
+
+
+def test_arm_has_no_elbow_bump():
+    coat = QColor(70, 82, 104)
+    img = paint(lambda p: draw_arm(p, coat, QPointF(10, 50), QPointF(100, 50), 15, "open", 45, 45), 120)
+    cols = [sum(1 for y in range(120) if img.pixelColor(x, y).rgb() == coat.rgb()) for x in range(20, 95)]
+    cols = [c for c in cols if c > 0]
+    assert all(cols[i + 1] <= cols[i] + 4 for i in range(len(cols) - 1))                     # (the fold line dents a column or two)

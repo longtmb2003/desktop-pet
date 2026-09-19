@@ -5,7 +5,7 @@ All drawing is in the definition's own pixel space (`defn.size` square, origin a
 import math
 
 from PySide6.QtCore import QPointF, QRect, QRectF, Qt
-from PySide6.QtGui import QColor, QCursor, QPainter, QPainterPath, QPen, QRegion, QTransform
+from PySide6.QtGui import QColor, QCursor, QPainter, QPainterPath, QPen, QPolygonF, QRegion, QTransform
 
 from .limbs import draw_arm
 from .renderer import heart, star
@@ -46,8 +46,8 @@ RED = QColor(206, 32, 41)
 def draw_prop(p, pk, bw, bh, t, mirror):
     """what it holds while working: a red "no entry, busy" sign, or a laptop; held in two hands on arms with elbows, sleeves from the
     shoulders, so it is clearly gripped rather than floating in front of the body"""
-    sx, sy0, aw = bw * 0.28, -bh * 0.53, max(11.0, bw * 0.15)                         # shoulders (on the chest), and the sleeve width
-    l1, l2 = bw * 0.32, bw * 0.30
+    sx, sy0, aw = bw * 0.28, -bh * 0.53, bw * 0.26                                     # shoulders (on the chest), the sleeve width there
+    l1, l2, hsz = bw * 0.32, bw * 0.30, bw * 0.0085                                     # segment lengths, and the hand's size (~19 px)
     if pk.work_prop == "sign":
         cy, r = -bh * 0.44, bw * 0.30                                                 # the disc's centre and radius
         grip = QPointF(0, cy + 6)                                                     # the sign is held by its sides
@@ -65,15 +65,76 @@ def draw_prop(p, pk, bw, bh, t, mirror):
         p.restore()
         p.restore()
         for side in (-1, 1):                                                          # both hands take hold of the rim (they sway with it)
-            rim = QPointF(side * (math.sqrt(r * r - 16 * 16) + 1), cy + 16)                  # a point on the rim, low on its side
+            rim = QPointF(side * bw * 0.26, cy + r + 10)                                # hands on the plaque's ends, arms hanging
             hold = grip + QTransform().rotate(math.sin(t * 3) * 4).map(rim - grip)
-            draw_arm(p, pk.coat, QPointF(side * sx, sy0), hold, aw, "grip", l1, l2)
+            draw_arm(p, pk.coat, QPointF(side * sx, sy0), hold, aw, "grip", l1, l2, hsz)
     else:
         top = -bh * 0.36
         p.setPen(QPen(QColor(90, 96, 110), 2)); p.setBrush(QColor(176, 184, 198))
         p.drawRoundedRect(QRectF(-bw * 0.28, top, bw * 0.56, bh * 0.16), 4, 4)
         p.setPen(Qt.NoPen); p.setBrush(QColor(236, 240, 246)); p.drawEllipse(QPointF(0, top + bh * 0.08), 3, 3)
-        for side in (-1, 1): draw_arm(p, pk.coat, QPointF(side * sx, sy0), QPointF(side * bw * 0.22, top + 3), aw, "grip", l1, l2)
+        for side in (-1, 1):
+            draw_arm(p, pk.coat, QPointF(side * sx, sy0), QPointF(side * bw * 0.30, top + bh * 0.08), aw, "grip", l1, l2, hsz)
+
+
+def riding(pet):
+    """is it riding its tricycle now? (a pack with a `ride`, walking or chasing calmly; not staggering, scared, etc.)"""
+    pk, s = pet.defn.pack, pet.state
+    calm = s.motion is Motion.WALK and s.action in (Action.NONE, Action.CHASE) and s.expression is Expression.NORMAL
+    return bool(pk and pk.ride) and calm
+
+
+def arm_sides(pet, mir):
+    """which of the picture's own arms (\"left\" / \"right\", as the art shows them) are replaced by a drawn arm right now"""
+    s = pet.state
+    if s.action in (Action.WORK, Action.LECTURE): return {"left", "right"}
+    if s.action is Action.POINT: screen = 1 if cursor(pet)[0] >= 0 else -1
+    elif s.action is Action.WAG: screen = 1
+    else: return set()
+    return {"right" if (screen if mir >= 0 else -screen) > 0 else "left"}                # (mirrored art has its left on the screen's right)
+
+
+def body_image(pk, sides):
+    """the body picture to draw: the arm-free variant when a drawn arm takes over from the one behind its back"""
+    if not sides or not pk.free: return pk.body
+    return pk.free["both" if len(sides) == 2 else next(iter(sides))]
+
+
+def draw_ride(p, ride, t, x, sign):
+    """the tricycle rider standing on the feet line, its wheels turning with `x`, how far it has gone (drawing units); `sign` is
+    +1 or -1 by whether the picture is drawn mirrored, which flips the sense of rotation"""
+    img = ride.image
+    rs = ride.height / img.height()
+    rect = QRectF(-img.width() * rs / 2, -ride.height, img.width() * rs, ride.height)
+    p.drawImage(rect, img)
+    p.save(); p.translate(rect.topLeft()); p.scale(rs, rs)                                     # the picture's own pixels from here
+    for w in ride.wheels:
+        rim = QPainterPath(); rim.addEllipse(QPointF(w["rim_x"], w["rim_y"]), w["rim_rx"], w["rim_ry"])
+        if w["avoid"]:
+            over = QPainterPath(); over.addPolygon(QPolygonF([QPointF(*a) for a in w["avoid"]])); over.closeSubpath()
+            rim = rim.subtracted(over)                                                          # (leave the rider's shoe alone)
+        p.save(); p.setClipPath(rim); p.translate(*w["hub"]); p.scale(1.0, w["rim_ry"] / w["rim_rx"])
+        turn = math.degrees(x / (w["ry"] * rs)) * sign
+        p.setPen(QPen(QColor(150, 82, 32), 4, Qt.SolidLine, Qt.RoundCap))
+        for k in range(3):
+            p.save(); p.rotate(turn + k * 120); p.drawLine(QPointF(w["rim_rx"] * 0.3, 0), QPointF(w["rim_rx"] * 1.3, 0)); p.restore()
+        p.restore()
+    p.restore()
+
+
+def draw_ride_effects(p, pet, bw, bh, t):
+    """dust puffs behind the wheels and speed lines: it is in a hurry"""
+    back = -pet.facing
+    if pet.turning(): return
+    p.setPen(Qt.NoPen)
+    for i in range(4):
+        ph = (t * 2.4 + i / 4) % 1
+        p.setBrush(QColor(236, 232, 224, int((1 - ph) * 140)))
+        p.drawEllipse(QPointF(back * (bw * 0.42 + ph * 38), -6 - ph * 16), 3 + ph * 7, 3 + ph * 6)
+    for i in range(3):
+        y, ln = -bh * 0.30 - i * 15, 22 + 8 * math.sin(t * 18 + i * 2)
+        p.setPen(QPen(QColor(120, 120, 130, 150 - i * 30), 2, Qt.SolidLine, Qt.RoundCap))
+        p.drawLine(QPointF(back * bw * 0.62, y), QPointF(back * (bw * 0.62 + ln), y))
 
 
 def cursor(pet):
@@ -85,8 +146,8 @@ def cursor(pet):
 def draw_scold(p, pk, bw, bh, t, action, pet, dx, dy):
     """the arm(s) of a scolding character, drawn upright (after the body's own transform): jabbing at the pointer, wagging a raised
     finger, or gesturing left and right with open hands"""
-    sx, sy0, aw = bw * 0.28, -bh * 0.53 - dy, max(11.0, bw * 0.15)
-    l1, l2 = bw * 0.32, bw * 0.30
+    sx, sy0, aw = bw * 0.28, -bh * 0.53 - dy, bw * 0.26
+    l1, l2, hsz = bw * 0.32, bw * 0.30, bw * 0.0085                                     # segment lengths, and the hand's size (~19 px)
     full = l1 + l2 - 1                                                                # the arm stretched out straight
     if action is Action.POINT:
         cx, cy = cursor(pet)
@@ -94,18 +155,18 @@ def draw_scold(p, pk, bw, bh, t, action, pet, dx, dy):
         sh = QPointF(side * sx + dx, sy0)
         ang = math.atan2(cy - sh.y(), cx - sh.x())
         jab = full - 2 + 3 * math.sin(t * 12)
-        draw_arm(p, pk.coat, sh, sh + QPointF(math.cos(ang), math.sin(ang)) * jab, aw, "point", l1, l2)
+        draw_arm(p, pk.coat, sh, sh + QPointF(math.cos(ang), math.sin(ang)) * jab, aw, "point", l1, l2, hsz)
     elif action is Action.WAG:
         sh = QPointF(sx + dx, sy0)
         a = math.radians(-78 + 20 * math.sin(t * 9))                                  # forearm up, wagging side to side: "no, no, no"
         elbow = sh + QPointF(math.cos(math.radians(-15)), math.sin(math.radians(-15))) * l1 * 0.9 + QPointF(0, l1 * 0.55)
-        hand = elbow + QPointF(math.cos(a), math.sin(a)) * l2
-        draw_arm(p, pk.coat, sh, hand, aw, "point", l1, l2)
+        tip = elbow + QPointF(math.cos(a), math.sin(a)) * l2
+        draw_arm(p, pk.coat, sh, tip, aw, "point", l1, l2, hsz)
     else:
         for side, phase in ((1, 0.0), (-1, math.pi)):                                 # both arms, alternately flung out
             a = math.radians(-20 + 25 * math.sin(t * 6 + phase))
             sh = QPointF(side * sx + dx, sy0)
-            draw_arm(p, pk.coat, sh, sh + QPointF(side * math.cos(a), math.sin(a)) * full * 0.85, aw, "open", l1, l2)
+            draw_arm(p, pk.coat, sh, sh + QPointF(side * math.cos(a), math.sin(a)) * full * 0.85, aw, "open", l1, l2, hsz)
 
 
 def pose(pet):
@@ -114,7 +175,12 @@ def pose(pet):
     dx = dy = rot = spin = 0.0
     sy = 1 + 0.02 * math.sin(t * 2.4)
     lying = s.motion is Motion.SLEEP
-    if s.motion is Motion.WALK and s.action is Action.NONE:
+    if riding(pet):
+        fast = 1.6 if s.action is Action.CHASE else 1.0
+        dy, rot = abs(math.sin(t * 11 * fast)) * 1.8, 3 * pet.facing + math.sin(t * 5) * 1.5      # bouncing along, leaning forward
+        if pet.turning():                                                                   # skidding round: leaning hard the wrong way
+            rot -= 14 * math.sin(math.pi * (t - pet.turn_start) / pet.defn.turn_s) * pet.facing
+    elif s.motion is Motion.WALK and s.action is Action.NONE:
         dy, rot = abs(math.sin(t * 9)) * pk.bob, math.sin(t * 9) * pk.sway                # a waddle
         if s.expression is Expression.DIZZY: rot = math.sin(t * 4) * 9
     elif s.action is Action.CHASE:
@@ -156,19 +222,24 @@ def paint_sprite(pet, p):
         p.translate(0, -bh / 2); p.rotate(spin); p.translate(0, bh / 2)
     mir = pet.turn_scale() * pk.art                                                        # -1 draws the art mirrored, 0 is edge-on
     p.rotate(rot); p.scale(sx * mir, sy)
-    rect = QRectF(-bw / 2, -bh, bw, bh)
-    p.drawImage(rect, pk.body)
-    p.save(); p.translate(rect.topLeft()); p.scale(bs, bs)                                # body pixels from here
-    bx, by, fw, fh = pk.box
-    if lying or s.expression is Expression.DIZZY:
-        vector_face(p, s, "sleep" if lying else "dizzy", pk.box)
+    on_wheels = riding(pet)
+    if on_wheels:
+        draw_ride(p, pk.ride, t, pet.px / pet.scale, 1 if mir >= 0 else -1)
     else:
-        kind = face_kind(pet)
-        p.drawImage(QRectF(bx, by, fw, fh), pk.face(kind, t))
-    p.restore()
-    if s.action is Action.WORK: draw_prop(p, pk, bw, bh, t, 1 if mir >= 0 else -1)
+        rect = QRectF(-bw / 2, -bh, bw, bh)
+        p.drawImage(rect, body_image(pk, arm_sides(pet, mir)))
+        p.save(); p.translate(rect.topLeft()); p.scale(bs, bs)                            # body pixels from here
+        bx, by, fw, fh = pk.box
+        if lying or s.expression is Expression.DIZZY:
+            vector_face(p, s, "sleep" if lying else "dizzy", pk.box)
+        else:
+            kind = face_kind(pet)
+            p.drawImage(QRectF(bx, by, fw, fh), pk.face(kind, t))
+        p.restore()
+        if s.action is Action.WORK: draw_prop(p, pk, bw, bh, t, 1 if mir >= 0 else -1)
     p.resetTransform(); p.scale(pet.scale, pet.scale); p.translate(d.size / 2, d.feet)    # extras: upright, not turned with the body
     if s.action in SCOLDING: draw_scold(p, pk, bw, bh, t, s.action, pet, dx, dy)
+    if on_wheels: draw_ride_effects(p, pet, bw, bh, t)
     if lying:
         f = p.font(); f.setBold(True)
         for i in range(3):

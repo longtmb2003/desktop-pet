@@ -17,6 +17,13 @@ pack.json (all lengths in window pixels at scale 1, image coordinates in pixels 
   sway, bob        walking waddle: degrees of tilt and pixels of bounce
   looks            "right" (default) or "left": the way the art in body.png faces. It is mirrored so it always looks where it walks
   turn             seconds to turn round when it changes direction (default 0.25; 0 = instantly)
+  body_free        {"left": "a.png", "right": "b.png", "both": "c.png"}: the body image again (same size) with the arm(s) that the art tucks
+                   behind the back cut away on that side ("left" and "right" as the picture shows them). Used while the character draws
+                   its own arm (pointing, holding a sign), so it never has two arms on one side
+  ride             {"image": "ride.png", "height": 170, "speed": 2.0, "wheels": [...], "lines": ["Ting ting!", ...]}: while walking it
+                   rides this picture (looking the same way as body.png), `speed` times as fast, spinning the wheels (each wheel:
+                   x, y, rx, ry of the tyre, rim_x, rim_y, rim_rx, rim_ry of the rim, hub [x, y], avoid [[x, y], ...] a shape over the
+                   rim to leave alone), and now and then calling out one of `lines`
   work_prop        what it holds while working (Pomodoro): "laptop" (default) or "sign", a red no-entry "BẬN" (busy) sign
 """
 import json
@@ -39,6 +46,15 @@ ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
 
 
 @dataclass
+class Ride:
+    image: QImage
+    height: float
+    speed: float
+    wheels: tuple                               # dicts, see the module docstring
+    lines: tuple
+
+
+@dataclass
 class SpritePack:
     body: QImage
     height: float
@@ -47,6 +63,8 @@ class SpritePack:
     fps: dict = field(default_factory=dict)
     sway: float = 4.0
     bob: float = 4.0
+    free: dict = field(default_factory=dict)      # arm-free bodies: "left" / "right" / "both" -> QImage (empty: none)
+    ride: "Ride | None" = None                   # the tricycle, if it has one
     masks: dict = field(default_factory=dict)     # cache: (scale, facing) -> exact outline region
     art: int = 1                                  # the way the body image faces: 1 = right, -1 = left
     work_prop: str = "laptop"                     # what it holds while working: "laptop" | "sign" (a red "busy" sign)
@@ -84,6 +102,42 @@ def _image(root, rel):
     if im.isNull(): raise ValueError(f"cannot read image {rel!r}")
     if im.width() > MAX_IMAGE or im.height() > MAX_IMAGE: raise ValueError(f"image {rel!r} is too large")
     return im.convertToFormat(QImage.Format_ARGB32_Premultiplied)
+
+
+WHEEL_KEYS = ("x", "y", "rx", "ry", "rim_x", "rim_y", "rim_rx", "rim_ry")
+
+
+def load_free(root, j, body):
+    """the arm-free bodies ({} if the pack has none); all three must be there and the same size as the body"""
+    fj = j.get("body_free")
+    if fj is None: return {}
+    if not isinstance(fj, dict) or set(fj) != {"left", "right", "both"}: raise ValueError('body_free needs "left", "right" and "both"')
+    free = {k: _image(root, v) for k, v in fj.items()}
+    if any(im.size() != body.size() for im in free.values()): raise ValueError("body_free images must be the size of body.png")
+    return free
+
+
+def load_ride(root, j):
+    """the tricycle (None if the pack has none)"""
+    rj = j.get("ride")
+    if rj is None: return None
+    if not isinstance(rj, dict): raise ValueError("ride must be an object")
+    image = _image(root, rj.get("image"))
+    wheels = []
+    for w in (rj.get("wheels") or [])[:4]:
+        if not isinstance(w, dict): raise ValueError("each wheel must be an object")
+        wheel = {k: _num(w.get(k), f"wheel.{k}", -4096, 4096) for k in WHEEL_KEYS}
+        hub = w.get("hub")
+        if not (isinstance(hub, list) and len(hub) == 2): raise ValueError("wheel.hub must be [x, y]")
+        wheel["hub"] = tuple(_num(v, "wheel.hub", -4096, 4096) for v in hub)
+        avoid = w.get("avoid") or []
+        if not (isinstance(avoid, list) and len(avoid) <= 32 and all(isinstance(a, list) and len(a) == 2 for a in avoid)):
+            raise ValueError("wheel.avoid must be a list of [x, y] points")
+        wheel["avoid"] = tuple((_num(a[0], "wheel.avoid", -4096, 4096), _num(a[1], "wheel.avoid", -4096, 4096)) for a in avoid)
+        wheels.append(wheel)
+    lines = tuple(c for c in (clean_text(x)[:60] for x in (rj.get("lines") or [])[:20] if isinstance(x, str)) if c)
+    height, speed = _num(rj.get("height", 170), "ride.height", 16, 512), _num(rj.get("speed", 1.8), "ride.speed", 1, 6)
+    return Ride(image, height, speed, tuple(wheels), lines)
 
 
 def coat_color(body):
@@ -135,9 +189,9 @@ def load_dir(root):
     if looks not in ("left", "right"): raise ValueError(f"looks must be left or right, got {looks!r}")
     turn = _num(j.get("turn", 0.25), "turn", 0, 2)
     pack = SpritePack(body, height, (bx, by, bw, bh), faces, fps, sway, bob, art=-1 if looks == "left" else 1, work_prop=prop,
-                      coat=coat_color(body))
+                      coat=coat_color(body), free=load_free(root, j, body), ride=load_ride(root, j))
     scold = tuple(c for c in (clean_text(x)[:80] for x in (j.get("scold") or [])[:30] if isinstance(x, str)) if c)
     text = {k: clean_text(j.get(k) or "")[:80] or dflt for k, dflt in (("drop", PetDef.drop), ("desktop_remark", PetDef.desktop_remark))}
     return PetDef(pid, name, "sprite", size, feet, feet - int(height), _num(j.get("walk_speed", 45), "walk_speed", 5, 400), weights,
                   chatter or ("...",), clean_text(j.get("scream") or "Á!")[:20] or "Á!", drop=text["drop"], scold=scold,
-                  desktop_remark=text["desktop_remark"], pack=pack, turn_s=turn)
+                  desktop_remark=text["desktop_remark"], pack=pack, turn_s=turn, ride_speed=pack.ride.speed if pack.ride else 1.0)

@@ -28,7 +28,7 @@ def pet(qapp, tmp_path):
     p.close()
 
 
-def write_pack(root, wide=False, nose=False, **over):
+def write_pack(root, wide=False, nose=False, ride=False, free=False, **over):
     """a small valid sprite pack in `root` (an opaque blob as the body, ink dots as faces); `over` replaces pack.json keys"""
     import json
 
@@ -50,6 +50,21 @@ def write_pack(root, wide=False, nose=False, **over):
          "faces": {"neutral": ["faces/n.png"], "talk": ["faces/t0.png", "faces/t1.png"], "laugh": ["faces/l.png"]},
          "fps": {"talk": 10}, "behaviors": {"idle": 3, "walk": 2, "sleep": 1, "rant": 1}, "chatter": ["Bloop", "Hello"], "scream": "Waaah!"}
     j.update(over)
+    if free:                                                      # arm-free bodies: the blob with a strip cut off where an arm went
+        for name in ("left", "right", "both"):
+            im = QImage(str(root / "body.png")).copy()
+            q = QPainter(im); q.setCompositionMode(QPainter.CompositionMode_Clear)
+            if name in ("left", "both"): q.fillRect(0, 0, 8, im.height(), Qt.black)
+            if name in ("right", "both"): q.fillRect(im.width() - 8, 0, 8, im.height(), Qt.black)
+            q.end(); im.save(str(root / f"free_{name}.png"))
+        j["body_free"] = {k: f"free_{k}.png" for k in ("left", "right", "both")}
+    if ride:                                                      # a 60x50 'tricycle' with one wheel
+        rd = QImage(60, 50, QImage.Format_ARGB32); rd.fill(0)
+        q = QPainter(rd); q.setBrush(QColor("#e67e22")); q.drawEllipse(5, 20, 30, 28); q.drawRect(20, 5, 35, 20); q.end()
+        rd.save(str(root / "ride.png"))
+        j["ride"] = {"image": "ride.png", "height": 60, "speed": 2.5, "lines": ["Ting ting!"],
+                     "wheels": [{"x": 20, "y": 34, "rx": 15, "ry": 14, "rim_x": 20, "rim_y": 34, "rim_rx": 10, "rim_ry": 9,
+                                 "hub": [20, 34], "avoid": []}]}
     (root / "pack.json").write_text(json.dumps(j), encoding="utf-8")
     return root
 

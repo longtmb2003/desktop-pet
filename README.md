@@ -32,6 +32,7 @@
 - Nghịch ngợm trên cửa sổ bạn đang làm việc: khi bạn dùng một cửa sổ được một lúc (trên 15 giây), thỉnh thoảng (mỗi 1 đến 2,5 phút) Mochi nói một câu hợp với ứng dụng đó ("Bug đâu, ra đây!" với trình soạn code, "Mở bao nhiêu tab rồi?" với trình duyệt...), nhảy lên đỉnh cửa sổ và nghịch: nhún nhảy, nhảy múa, ngồi ở mép đung đưa chân, hoặc thò người nhìn xuống. Cửa sổ không đứng được (phóng to hết cỡ, che khuất, quá hẹp) thì nó nghịch ngay ở sàn. Không nghịch khi đang Pomodoro, yên lặng, đang ngủ hay vừa bị bạn vuốt ve; tắt được trong Cài đặt
 - Hà Nhân còn mắng bạn: chìa ngón tay chỉ thẳng vào con trỏ chuột, giơ ngón tay lắc "không được đâu", hoặc đi đi lại lại vung tay lên lớp, kèm câu mắng ("Làm việc đi, đừng có lười!")
 - Hà Nhân đi hướng nào thì mặt quay hướng đó, đổi chiều thì xoay người lại (không đi lùi)
+- Hà Nhân đi là **đạp xe ba bánh**: nhanh gấp đôi, bánh xe quay theo quãng đường, bụi và vạch gió phía sau, nhún nhảy và lấy đà nghiêng người khi quay đầu (xe "drift"), thỉnh thoảng bấm chuông "Ting ting!". Khi mắng hoặc cầm biển, cánh tay vẽ thay cho cánh tay đặt sau lưng trong ảnh gốc (dùng bản ảnh đã cắt cánh tay), nên không bao giờ có hai cánh tay một bên; cánh tay là một ống tay áo thon liền mạch có cổ tay áo trắng và bàn tay 5 ngón, theo tranh gốc của tác giả
 - Lời thoại hiện 2,5 đến 5 giây tuỳ độ dài
 - Chuột phải: Màu / Chế độ / Pomodoro / Nhắc việc / Chế độ yên lặng / Cài đặt / Nhân vật / Ngủ / Gọi về / Tạm dừng / Tự chạy khi đăng nhập / Thoát
 
