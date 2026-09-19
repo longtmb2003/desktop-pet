@@ -9,9 +9,8 @@ from . import physics
 from .physics import FEET, GRAVITY, S, WALK_SPEED, Bounds
 from .renderer import THEMES, paint, silhouette
 from .settings import Settings
+from .state import Action, Expression, Motion, State, after, ends_at
 
-DUR = {"idle": (2, 5), "walk": (3, 8), "sleep": (8, 20), "happy": (1.4, 1.4),      # seconds per state
-       "yawn": (1.8, 1.8), "stretch": (2.4, 2.4), "groom": (3, 4.5), "chase": (5, 9)}
 MAX_DT = 0.05                       # cap one frame's time step so a stall can't launch the pet through a window
 
 
@@ -29,7 +28,7 @@ class Pet(QWidget):
         self.theme = self.cfg.theme
         g = self.screen_geo()
         self.px, self.py = random.uniform(g.left + 80, g.right - 240), g.top - 100
-        self.set_state("fall")
+        self.enter(State(Motion.AIRBORNE))
         self.clock = QElapsedTimer(); self.clock.start()   # real frame time, see tick()
         self.timer = QTimer(self, interval=33, timeout=self.tick)
         self.timer.start()
@@ -38,17 +37,11 @@ class Pet(QWidget):
         self.wins = wins
 
     # ---- behaviour -------------------------------------------------------
-    def pick_next(self):
-        w = {"idle": 4, "walk": 3, "sleep": 1, "groom": 2, "yawn": 1, "stretch": 1, "chase": 1}
-        w.pop(self.state, None)   # never repeat the action it just finished
-        return random.choices(list(w), list(w.values()))[0]
-
-    def set_state(self, s):
-        self.state = s
-        lo, hi = DUR.get(s, (0, 0))
-        self.until = self.t + random.uniform(lo, hi)
-        self.began, self.dur = self.t, max(self.until - self.t, 1e-3)          # for one-shot animations
-        if s == "walk":
+    def enter(self, state):
+        self.state = state
+        self.until = ends_at(state, self.t)
+        self.began, self.dur = self.t, max(min(self.until - self.t, 1e9), 1e-3)   # for one-shot animations
+        if state.motion is Motion.WALK and state.action is Action.NONE:
             self.facing = random.choice((-1, 1))
 
     def screen_geo(self):
@@ -64,7 +57,7 @@ class Pet(QWidget):
             self.blink, self.next_blink = 0.15, self.t + random.uniform(2, 5)
         self.blink -= dt
         self.hearts = [[x, y - 40 * dt, l - dt] for x, y, l in self.hearts if l > dt]
-        if self.state != "drag":
+        if self.state.motion is not Motion.DRAG:
             g = self.screen_geo()
             cx = self.px + S / 2
             floor, wid = physics.surface(self.wins, self.support, cx, self.py + FEET, g)
@@ -78,19 +71,19 @@ class Pet(QWidget):
                 self.px = max(g.left - 40, min(g.right - S + 40, self.px + self.vx * dt))
                 if self.py >= floor:
                     self.py, self.vy, self.vx, self.squash, self.support, self.grounded = floor, 0.0, 0.0, 0.3, wid, True
-                    if self.state == "fall":
-                        self.set_state("idle")
+                    if self.state.motion is Motion.AIRBORNE:
+                        self.enter(State())
             else:
                 self.support, riding = wid, True
             if riding:                                             # on the floor or a window: free to move
                 self.grounded = True
-                if self.state == "walk":
-                    self.walk(dt, g, cx, wid)
-                elif self.state == "chase":
-                    self.chase(dt, g, cx, wid)
-            if self.state in DUR and self.t > self.until:
-                nxt = {"happy": "idle", "yawn": random.choice(("sleep", "idle"))}    # a yawn often ends in a nap
-                self.set_state(nxt.get(self.state) or self.pick_next())
+                if self.state.motion is Motion.WALK:
+                    if self.state.action is Action.CHASE:
+                        self.chase(dt, g, cx, wid)
+                    else:
+                        self.walk(dt, g, cx, wid)
+            if self.t > self.until:
+                self.enter(after(self.state))
             self.move(int(self.px), int(self.py))
         self.update_mask()
         self.update()
@@ -99,7 +92,7 @@ class Pet(QWidget):
         lo, hi = physics.span(self.wins, g, wid)
         dx = max(lo, min(hi, QCursor.pos().x())) - cx
         if abs(dx) < 45:
-            self.set_state("happy")                                # caught it!
+            self.enter(State(expression=Expression.HAPPY))         # caught it!
             return
         self.facing = 1 if dx > 0 else -1
         self.px += self.facing * 2 * WALK_SPEED * dt
@@ -125,7 +118,7 @@ class Pet(QWidget):
 
     def update_mask(self):
         # clip the window to the pet's silhouette so clicks pass through the transparent rest
-        f, sleep, stretch = -self.facing, self.state == "sleep", self.state == "stretch"
+        f, sleep, stretch = -self.facing, self.state.motion is Motion.SLEEP, self.state.action is Action.STRETCH
         key = (f, sleep, stretch, tuple((int(x), int(y)) for x, y, _ in self.hearts))
         if key == self.mask_key: return
         self.mask_key = key
@@ -143,7 +136,7 @@ class Pet(QWidget):
         if not self.moved and (g - self.press).manhattanLength() > 4:
             self.moved = True
             self.support, self.vx = None, 0.0
-            self.set_state("drag")
+            self.enter(State(Motion.DRAG))
         if self.moved:
             p = g - self.off
             self.px, self.py, self.vy = p.x(), p.y(), 0.0
@@ -153,9 +146,9 @@ class Pet(QWidget):
         if self.press is None: return
         self.press = None
         if self.moved:
-            self.set_state("fall")
+            self.enter(State(Motion.AIRBORNE))
         else:                                                # a click = a pet
-            self.set_state("happy")
+            self.enter(State(expression=Expression.HAPPY))
             self.vy = -420
             self.hearts += [[random.uniform(-30, 30), -95, 1.2 + random.random() * .5] for _ in range(4)]
 
@@ -166,7 +159,7 @@ class Pet(QWidget):
             a = colors.addAction(name)
             a.setCheckable(True); a.setChecked(name == self.theme)
             a.triggered.connect(lambda _, n=name: self.set_theme(n))
-        m.addAction("Ngủ", lambda: self.set_state("sleep"))
+        m.addAction("Ngủ", lambda: self.enter(State(Motion.SLEEP)))
         m.addAction("Gọi về", self.bring_back)
         m.addAction("Thoát", QApplication.quit)
         m.exec(e.globalPos())
@@ -175,7 +168,7 @@ class Pet(QWidget):
         """drop the pet in from the top of the primary screen (e.g. it got lost off-screen)"""
         g = QGuiApplication.primaryScreen().availableGeometry()
         self.px, self.py, self.vy, self.vx, self.support = g.center().x() - S / 2, g.top() - 100, 0.0, 0.0, None
-        self.set_state("fall")
+        self.enter(State(Motion.AIRBORNE))
 
     def set_theme(self, name):
         self.theme = name

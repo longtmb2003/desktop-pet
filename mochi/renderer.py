@@ -5,6 +5,7 @@ from PySide6.QtCore import QPoint, QPointF, QRectF, Qt
 from PySide6.QtGui import QBrush, QColor, QCursor, QLinearGradient, QPainter, QPainterPath, QPen, QRegion
 
 from .physics import FEET, S
+from .state import Action, Expression, Motion
 
 THEMES = {  # body gradient top/bottom, ear, tail, inner ear, eye
     "Kem":     dict(top="#fff4ea", bottom="#ffdcc8", ear="#f7cdb7", tail="#f6c3aa", inner="#ffb3c1", eye="#3b2a35"),
@@ -39,24 +40,27 @@ def paint(pet, p):
     """Draw `pet` onto QPainter `p` (a painter on the pet window)."""
     p.setRenderHint(QPainter.Antialiasing)
     p.translate(S / 2, FEET)
-    t, st = pet.t, pet.state
-    up = st in ("fall", "drag")
+    t, state = pet.t, pet.state
+    motion, act = state.motion, state.action
+    happy, sleep, drag = state.expression is Expression.HAPPY, motion is Motion.SLEEP, motion is Motion.DRAG
+    walking = motion is Motion.WALK and act is Action.NONE          # a chase runs, it doesn't use the walk cycle
+    up = motion in (Motion.AIRBORNE, Motion.DRAG)
     th = THEMES[pet.theme]
     DARK, TAIL, EAR, PINK = (QColor(th[k]) for k in ("eye", "tail", "ear", "inner"))
     if pet.grounded:                                                          # shadow only when standing
         p.setPen(Qt.NoPen); p.setBrush(QColor(0, 0, 0, 38)); p.drawEllipse(QPointF(0, 1), 46, 6)
 
     hop, sy = 0.0, 1 + 0.025 * math.sin(t * 2.4)
-    if st == "walk": hop = abs(math.sin(t * 9)) * 7
-    elif st == "sleep": sy = 1 + 0.04 * math.sin(t * 1.2)
-    elif st == "drag": sy = 1.08
+    if walking: hop = abs(math.sin(t * 9)) * 7
+    elif sleep: sy = 1 + 0.04 * math.sin(t * 1.2)
+    elif drag: sy = 1.08
     o = math.sin(math.pi * min(1, (t - pet.began) / pet.dur))               # 0 -> 1 -> 0 over a one-shot move
     tilt = shift = 0.0
-    if st == "stretch": sy -= .14 * o; tilt = 4 * o; shift = 8 * o                           # stretch forward, bum up
-    elif st == "yawn": sy += .05 * o; tilt = -5 * o
-    elif st == "chase": hop = abs(math.sin(t * 14)) * 9
+    if act is Action.STRETCH: sy -= .14 * o; tilt = 4 * o; shift = 8 * o                           # stretch forward, bum up
+    elif act is Action.YAWN: sy += .05 * o; tilt = -5 * o
+    elif act is Action.CHASE: hop = abs(math.sin(t * 14)) * 9
     sy -= pet.squash
-    sx = 2 - sy if st != "drag" else .94        # keep volume: taller = thinner
+    sx = 2 - sy if not drag else .94        # keep volume: taller = thinner
     p.translate(shift * pet.facing, -hop)
     p.rotate(tilt * pet.facing)
     p.scale(-sx * pet.facing, sy)                               # tail trails behind the walking direction
@@ -65,7 +69,7 @@ def paint(pet, p):
         p.setPen(Qt.NoPen); p.setBrush(c); p.drawEllipse(QPointF(x, y), rx, ry)
 
     # tail
-    wag = math.sin(t * (9 if st == "happy" else 4)) * (2 if st == "sleep" else 9)
+    wag = math.sin(t * (9 if happy else 4)) * (2 if sleep else 9)
     tail = QPainterPath(QPointF(38, -22))
     tail.cubicTo(70, -25, 72, -58 + wag, 58, -70 + wag)
     p.setPen(QPen(TAIL, 13, Qt.SolidLine, Qt.RoundCap)); p.setBrush(Qt.NoBrush); p.drawPath(tail)
@@ -84,7 +88,7 @@ def paint(pet, p):
     # feet
     for i, m in enumerate((-1, 1)):
         if up: blob(TAIL, m * 18, 6 + math.sin(t * 8 + i * 2) * 3, 9, 10)
-        else:  blob(TAIL, m * 20, -5 - (max(0, math.sin(t * 9 + i * math.pi)) * 5 if st == "walk" else 0), 13, 8)
+        else:  blob(TAIL, m * 20, -5 - (max(0, math.sin(t * 9 + i * math.pi)) * 5 if walking else 0), 13, 8)
 
     # body
     g = QLinearGradient(0, -80, 0, -4)
@@ -97,31 +101,31 @@ def paint(pet, p):
     lx, ly = max(-1, min(1, cur.x() / 250)) * -2.5 * pet.facing, max(-1, min(1, cur.y() / 250)) * 1.5
     pen = QPen(DARK, 3, Qt.SolidLine, Qt.RoundCap)
     for x in (-19, 19):
-        if st in ("sleep", "yawn", "stretch", "groom") or pet.blink > 0:
+        if sleep or act in (Action.YAWN, Action.STRETCH, Action.GROOM) or pet.blink > 0:
             arc = QPainterPath(QPointF(x - 7, -46)); arc.quadTo(x, -40, x + 7, -46)
-        elif st == "happy":
+        elif happy:
             arc = QPainterPath(QPointF(x - 7, -43)); arc.quadTo(x, -53, x + 7, -43)
         else:
-            r = 1.2 if st == "drag" else 1
+            r = 1.2 if drag else 1
             blob(DARK, x + lx, -46 + ly, 7.5 * r, 9.5 * r)
             blob(Qt.white, x + lx * 1.6 - 2.5, -49 + ly, 3, 3); blob(Qt.white, x + lx + 3, -42 + ly, 1.5, 1.5)
             continue
         p.setPen(pen); p.setBrush(Qt.NoBrush); p.drawPath(arc)
-    if st == "drag": blob(DARK, 0, -35, 3, 4)
-    elif st == "happy": blob(PINK.darker(130), 0, -35, 4, 4.5)
-    elif st == "yawn": blob(PINK.darker(150), 0, -33, 4 + 3 * o, 2 + 8 * o)
+    if drag: blob(DARK, 0, -35, 3, 4)
+    elif happy: blob(PINK.darker(130), 0, -35, 4, 4.5)
+    elif act is Action.YAWN: blob(PINK.darker(150), 0, -33, 4 + 3 * o, 2 + 8 * o)
     else:
         mouth = QPainterPath(QPointF(-5, -38)); mouth.quadTo(-2.5, -33, 0, -38); mouth.quadTo(2.5, -33, 5, -38)
         p.setPen(QPen(DARK, 2, Qt.SolidLine, Qt.RoundCap)); p.setBrush(Qt.NoBrush); p.drawPath(mouth)
 
-    if st == "groom":                                          # lick a paw, stroke the cheek
+    if act is Action.GROOM:                                          # lick a paw, stroke the cheek
         lift = (.5 + .5 * math.sin(t * 9)) * min(1, o * 3)
         blob(TAIL, 27 - 5 * lift, -16 - 22 * lift, 8, 10)
         blob(PINK, 25 - 5 * lift, -24 - 22 * lift, 2.5, 2)
 
     # floating extras, drawn in unscaled space
     p.resetTransform(); p.translate(S / 2, FEET)
-    if st == "sleep":
+    if sleep:
         f = p.font(); f.setBold(True)
         for i in range(3):
             ph = (t * .5 + i / 3) % 1
