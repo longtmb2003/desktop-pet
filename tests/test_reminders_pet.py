@@ -111,6 +111,7 @@ def test_adding_a_daily_reminder_with_chosen_days(dlg, pet):
     r = rem.parse(pet.cfg.reminders)[0]
     assert (r.kind, r.at, r.days) == ("daily", "09:30", (0, 1, 2, 3, 4))
     assert not dlg.minutes.isVisibleTo(dlg) and dlg.at.isVisibleTo(dlg) and dlg.days_row.isVisibleTo(dlg)
+    assert dlg.form.labelForField(dlg.at).isVisibleTo(dlg) and not dlg.form.labelForField(dlg.minutes).isVisibleTo(dlg)      # labels follow
 
 
 def test_an_empty_text_or_no_days_is_refused_with_a_message(dlg, pet):

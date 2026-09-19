@@ -17,7 +17,7 @@ class RemindersDialog(QDialog):
         lay.addWidget(QLabel("Mochi sẽ nói câu nhắc bằng bong bóng thoại (kèm tiếng chuông nếu bật âm thanh)."))
         self.list = QListWidget(); lay.addWidget(self.list)
 
-        form = QFormLayout(); lay.addLayout(form)
+        self.form = form = QFormLayout(); lay.addLayout(form)
         self.text = QLineEdit(); self.text.setPlaceholderText("Ví dụ: Uống nước đi!"); self.text.setMaxLength(rem.MAX_TEXT)
         self.kind = QComboBox(); self.kind.addItem("Lặp lại sau mỗi ... phút", "every"); self.kind.addItem("Hằng ngày vào lúc ...", "daily")
         self.minutes = QSpinBox(); self.minutes.setRange(1, 1440); self.minutes.setValue(45); self.minutes.setSuffix(" phút")
@@ -44,7 +44,8 @@ class RemindersDialog(QDialog):
     # ---- the form <-> a Reminder ------------------------------------------------------------------------
     def show_kind(self):
         daily = self.kind.currentData() == "daily"
-        self.minutes.setVisible(not daily); self.at.setVisible(daily); self.days_row.setVisible(daily)
+        for w, on in ((self.minutes, not daily), (self.at, daily), (self.days_row, daily)):
+            w.setVisible(on); self.form.labelForField(w).setVisible(on)                  # hide the label with its field
 
     def from_form(self):
         """the Reminder the form describes, or None (with a message) if it isn't usable yet"""
