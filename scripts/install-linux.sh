@@ -28,6 +28,25 @@ if ! curl -fL -o "$BIN" "$URL" 2>/dev/null; then
 fi
 
 chmod +x "$BIN"
+
+# Check if the binary can run on this system (detect glibc / dynamic linking errors)
+if ! "$BIN" --version >/dev/null 2>&1; then
+    echo ">>> [!] File nhị phân tải về không tương thích với môi trường Linux hiện tại (GLIBC/thư viện hệ thống)."
+    for candidate in "$PWD/desktop-pet" "$HOME/IdeaProjects/desktop-pet" "$HOME/desktop-pet"; do
+        if [ -d "$candidate" ]; then
+            echo ">>> Tìm thấy mã nguồn tại: $candidate. Đang tự động build và cài đặt trực tiếp trên máy của bạn..."
+            bash "$candidate/scripts/install.sh" --autostart
+            echo ">>> Đang khởi chạy Mochi..."
+            "$BIN" &
+            exit 0
+        fi
+    done
+    echo ">>> Bạn có thể tự clone và cài đặt từ source:" >&2
+    echo ">>>   git clone https://github.com/longtmb2003/desktop-pet.git" >&2
+    echo ">>>   cd desktop-pet && ./scripts/install.sh --autostart" >&2
+    exit 1
+fi
+
 echo ">>> Đã cài đặt thành công tại: $BIN"
 echo ">>> Đang khởi chạy Mochi..."
 "$BIN" &
