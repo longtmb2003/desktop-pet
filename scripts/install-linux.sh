@@ -32,7 +32,10 @@ if ! (ldconfig -p 2>/dev/null || /sbin/ldconfig -p 2>/dev/null) | grep -q "libxc
     if [ ! -f /usr/lib/x86_64-linux-gnu/libxcb-cursor.so.0 ] && [ ! -f /usr/lib64/libxcb-cursor.so.0 ] && [ ! -f /usr/lib/libxcb-cursor.so.0 ]; then
         if command -v apt-get >/dev/null 2>&1; then
             echo ">>> [!] Đang cài đặt thư viện cần thiết 'libxcb-cursor0'..."
-            sudo apt-get update -qq && sudo apt-get install -y libxcb-cursor0 || true
+            sudo apt-get install -y libxcb-cursor0 2>/dev/null || {
+                sudo apt-get update -qq -o Acquire::AllowInsecureRepositories=true 2>/dev/null || true
+                sudo apt-get install -y libxcb-cursor0 || true
+            }
         fi
     fi
 fi

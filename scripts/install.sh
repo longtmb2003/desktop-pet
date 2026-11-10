@@ -15,8 +15,11 @@ if ! (ldconfig -p 2>/dev/null || /sbin/ldconfig -p 2>/dev/null) | grep -q "libxc
         echo ">>> [!] Thiếu thư viện hệ thống 'libxcb-cursor0' (bắt buộc cho Qt6 xcb plugin)."
         if command -v apt-get >/dev/null 2>&1; then
             echo ">>> Đang tự động cài đặt qua apt (có thể cần mật khẩu sudo):"
-            sudo apt-get update -qq && sudo apt-get install -y libxcb-cursor0 || {
-                echo ">>> Vui lòng tự cài đặt bằng lệnh: sudo apt install -y libxcb-cursor0" >&2
+            sudo apt-get install -y libxcb-cursor0 2>/dev/null || {
+                sudo apt-get update -qq -o Acquire::AllowInsecureRepositories=true 2>/dev/null || true
+                sudo apt-get install -y libxcb-cursor0 || {
+                    echo ">>> Vui lòng tự cài đặt bằng lệnh: sudo apt install -y libxcb-cursor0" >&2
+                }
             }
         fi
     fi

@@ -34,7 +34,11 @@ def main():
         os.environ.pop(var, None)
     os.environ["GIO_MODULE_DIR"] = "/dev/null"
     if os.environ.get("WAYLAND_DISPLAY"):
-        os.environ.setdefault("QT_QPA_PLATFORM", "xcb")  # Wayland forbids self-positioning; XWayland allows it
+        import ctypes.util
+        if ctypes.util.find_library("xcb-cursor"):
+            os.environ.setdefault("QT_QPA_PLATFORM", "xcb")  # Wayland forbids self-positioning; XWayland allows it
+        else:
+            logging.warning("libxcb-cursor0 not found: running on Wayland (floor-only mode). For window climbing, install: sudo apt install -y libxcb-cursor0")
     from PySide6.QtWidgets import QApplication
 
     from .pet import Pet
