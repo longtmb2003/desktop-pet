@@ -36,6 +36,7 @@ class SettingsDialog(QDialog):
         super().__init__()
         self.pet, self.cfg = pet, pet.cfg
         self.setWindowTitle("Mochi: Cài đặt")
+        self.setAttribute(Qt.WA_QuitOnClose, False)
         apply_theme(self)
         lay, form = QVBoxLayout(self), QFormLayout()
         lay.setContentsMargins(16, 16, 16, 16)
@@ -100,9 +101,12 @@ class SettingsDialog(QDialog):
         form.addRow("Pomodoro: tập trung", self.focus)
         form.addRow("Pomodoro: nghỉ", self.rest)
 
-        rem_btn = QPushButton("Nhắc việc..."); rem_btn.clicked.connect(pet.open_reminders); lay.addWidget(rem_btn)
-        back = QPushButton("Gọi Mochi về / đặt lại vị trí"); back.clicked.connect(pet.bring_back)
-        lay.addWidget(back)
+        btn_box = QHBoxLayout()
+        btn_box.setSpacing(8)
+        rem_btn = QPushButton("Nhắc việc..."); rem_btn.clicked.connect(pet.open_reminders); btn_box.addWidget(rem_btn)
+        back = QPushButton("Gọi Mochi về"); back.clicked.connect(pet.bring_back); btn_box.addWidget(back)
+        close_btn = QPushButton("Đóng"); close_btn.clicked.connect(self.close); btn_box.addWidget(close_btn)
+        lay.addLayout(btn_box)
         self.back = back
 
     def time_of(self, key):

@@ -109,3 +109,10 @@ def test_the_sleep_schedule_is_edited_in_the_dialog(pet):
         assert d.times["night_from"].time() == QTime(22, 0)                                  # unusable value: the default is shown
     finally:
         d.close()
+
+
+def test_closing_settings_dialog_does_not_quit_pet(pet):
+    from PySide6.QtCore import Qt
+    d = SettingsDialog(pet)
+    assert d.testAttribute(Qt.WA_QuitOnClose) is False
+    d.close()

@@ -49,8 +49,8 @@ if ! "$BIN" --version >/dev/null 2>&1; then
         if [ -d "$candidate" ]; then
             echo ">>> Tìm thấy mã nguồn tại: $candidate. Đang tự động build và cài đặt trực tiếp trên máy của bạn..."
             bash "$candidate/scripts/install.sh" --autostart
-            echo ">>> Đang khởi chạy Mochi..."
-            "$BIN" &
+            echo ">>> Đang khởi chạy Mochi ngầm trong tiến trình (daemon)..."
+            "$BIN" -d || nohup "$BIN" >/dev/null 2>&1 &
             exit 0
         fi
     done
@@ -61,5 +61,5 @@ if ! "$BIN" --version >/dev/null 2>&1; then
 fi
 
 echo ">>> Đã cài đặt thành công tại: $BIN"
-echo ">>> Đang khởi chạy Mochi..."
-"$BIN" &
+echo ">>> Đang khởi chạy Mochi ngầm trong tiến trình (daemon)..."
+"$BIN" -d || nohup "$BIN" >/dev/null 2>&1 &

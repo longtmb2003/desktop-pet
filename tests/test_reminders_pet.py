@@ -166,3 +166,10 @@ def test_pet_snooze_alert(pet):
     assert "Đã hoãn lại 5 phút" in pet.bubble.queue.items
     assert len(pet.sched.snoozed) == 1
 
+
+def test_closing_reminders_dialog_does_not_quit_pet(pet):
+    from PySide6.QtCore import Qt
+    d = RemindersDialog(pet)
+    assert d.testAttribute(Qt.WA_QuitOnClose) is False
+    d.close()
+

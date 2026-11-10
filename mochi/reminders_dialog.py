@@ -1,5 +1,5 @@
 """The window for setting up reminders. Every change is saved and applied at once."""
-from PySide6.QtCore import QTime
+from PySide6.QtCore import QTime, Qt
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QListWidget, QPushButton,
                                QSpinBox, QTimeEdit, QVBoxLayout, QWidget)
 
@@ -14,6 +14,7 @@ class RemindersDialog(QDialog):
         super().__init__()
         self.pet, self.items = pet, rem.parse(pet.cfg.reminders)
         self.setWindowTitle("Mochi: Nhắc việc")
+        self.setAttribute(Qt.WA_QuitOnClose, False)
         apply_theme(self)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(16, 16, 16, 16)
@@ -44,7 +45,8 @@ class RemindersDialog(QDialog):
         self.add = QPushButton("Thêm")
         self.add.setProperty("primary", "true")
         self.update_btn, self.delete, self.test = (QPushButton(t) for t in ("Cập nhật", "Xoá", "Thử ngay"))
-        for b in (self.add, self.update_btn, self.delete, self.test): buttons.addWidget(b)
+        self.close_btn = QPushButton("Đóng"); self.close_btn.clicked.connect(self.close)
+        for b in (self.add, self.update_btn, self.delete, self.test, self.close_btn): buttons.addWidget(b)
         self.status = QLabel(""); lay.addWidget(self.status)
 
         self.kind.currentIndexChanged.connect(lambda _: self.show_kind())

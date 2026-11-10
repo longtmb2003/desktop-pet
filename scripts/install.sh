@@ -56,5 +56,5 @@ command -v update-desktop-database >/dev/null && update-desktop-database "$DATA/
 command -v kbuildsycoca6 >/dev/null && kbuildsycoca6 >/dev/null 2>&1 || true
 
 [ "${1:-}" = "--autostart" ] && "$APP/mochi" autostart on
-echo "installed: $BIN   (start it from the app menu, or run: mochi)"
+echo "installed: $BIN   (start it from the app menu, or run in background: mochi -d)"
 echo "autostart at login:  mochi autostart on | off | status"

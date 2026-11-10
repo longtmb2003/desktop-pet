@@ -5,8 +5,8 @@ import time
 from datetime import datetime
 
 from PySide6.QtCore import QElapsedTimer, QFileSystemWatcher, QPoint, QRect, Qt, QTimer, QUrl
-from PySide6.QtGui import QColor, QCursor, QGuiApplication, QPainter, QTransform
-from PySide6.QtWidgets import QApplication, QMenu, QWidget
+from PySide6.QtGui import QColor, QCursor, QGuiApplication, QIcon, QPainter, QTransform
+from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QWidget
 
 from . import apps, autostart, desktop, modes, monitor, physics, sleep
 from . import reminders as rem
@@ -35,6 +35,7 @@ class Pet(QWidget):
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool | Qt.WindowDoesNotAcceptFocus)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
+        self.setAttribute(Qt.WA_QuitOnClose, False)
         self.t = self.vy = self.squash = self.blink = 0.0
         self.facing, self.hearts = 1, []            # hearts: [x, y, life]
         self.drawn_facing, self.turn_from, self.turn_start = 1, 1.0, -1e9      # turning round takes a moment: see turn_scale()
@@ -73,6 +74,18 @@ class Pet(QWidget):
         self.timer.start()
         self.sync_monitor()
         QGuiApplication.instance().screenRemoved.connect(lambda _: QTimer.singleShot(0, self.ensure_visible))
+        self.tray = None
+        if QSystemTrayIcon.isSystemTrayAvailable():
+            try:
+                from pathlib import Path
+                self.tray = QSystemTrayIcon(self)
+                icon_path = Path(__file__).resolve().parent.parent / "packaging" / "mochi.png"
+                if icon_path.exists(): self.tray.setIcon(QIcon(str(icon_path)))
+                self.tray.setToolTip("Mochi Desktop Pet")
+                self.tray.activated.connect(self.on_tray_activated)
+                self.tray.show()
+            except Exception:
+                pass
 
     def set_windows(self, wins):
         self.wins = wins
@@ -478,10 +491,12 @@ class Pet(QWidget):
 
     def open_reminders(self):
         if getattr(self, "reminders_dialog", None) is None: self.reminders_dialog = RemindersDialog(self)
+        self.reminders_dialog.refresh()
         self.reminders_dialog.show(); self.reminders_dialog.raise_(); self.reminders_dialog.activateWindow()
 
     def open_settings(self):
         if getattr(self, "dialog", None) is None: self.dialog = SettingsDialog(self)
+        self.dialog.reload()
         self.dialog.show(); self.dialog.raise_(); self.dialog.activateWindow()
 
     def sync_monitor(self):
@@ -701,6 +716,7 @@ class Pet(QWidget):
             for pid, d in self.pets.items():
                 a = who.addAction(d.name); a.setCheckable(True); a.setChecked(pid == self.defn.id)
                 a.triggered.connect(lambda _, i=pid: (setattr(self.cfg, "pet", i), self.apply_settings()))
+        m.addAction("Ẩn pet (chạy ngầm)" if self.isVisible() else "Hiện pet", self.toggle_visibility)
         m.addAction("Ngủ", lambda: self.enter(State(Motion.SLEEP)))
         m.addAction("Gọi về", self.bring_back)
         a = m.addAction("Tạm dừng"); a.setCheckable(True); a.setChecked(self.paused); a.toggled.connect(self.set_paused)
@@ -711,9 +727,25 @@ class Pet(QWidget):
 
     def bring_back(self):
         """drop the pet in from the top of the primary screen (e.g. it got lost off-screen)"""
+        if not self.isVisible(): self.show()
         g = QGuiApplication.primaryScreen().availableGeometry()
         self.px, self.py, self.vy, self.vx, self.support = g.center().x() - self.size / 2, g.top() - 100 * self.scale, 0.0, 0.0, None
         self.enter(State(Motion.AIRBORNE))
+
+    def on_tray_activated(self, reason):
+        if reason == QSystemTrayIcon.Trigger:
+            self.toggle_visibility()
+        elif reason == QSystemTrayIcon.Context:
+            self.build_menu().exec(QCursor.pos())
+
+    def toggle_visibility(self):
+        if self.isVisible():
+            self.hide()
+            if getattr(self, "tray", None) and self.tray.isVisible():
+                self.tray.showMessage("Mochi", "Mochi đang chạy ngầm trong khay hệ thống. Click icon để hiện lại!", QSystemTrayIcon.Information, 2500)
+        else:
+            self.show()
+            self.bring_back()
 
     def set_paused(self, on):
         """freeze the pet in place (timer stopped, so no CPU) or let it carry on"""

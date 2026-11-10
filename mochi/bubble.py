@@ -68,6 +68,7 @@ class SpeechBubble(QWidget):
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
         self.setAttribute(Qt.WA_TransparentForMouseEvents)        # never steals a click from what's underneath
+        self.setAttribute(Qt.WA_QuitOnClose, False)
         self.queue, self.on_right, self.lines, self.box = BubbleQueue(), True, "", QRect()
         self.phase = "idle"                                        # idle -> show -> gap -> show ... -> idle
         self.timer = QTimer(self, singleShot=True, timeout=self.advance)   # the only timer

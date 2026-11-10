@@ -9,13 +9,22 @@ from . import __version__, autostart
 
 
 def cli(argv):
-    """handle `mochi autostart on|off|status`, `mochi pets` and `--version` without starting the GUI; True if it did"""
+    """handle `mochi autostart on|off|status`, `mochi pets`, `-d/--daemon`, and `--version` without starting the GUI; True if it did"""
     ap = argparse.ArgumentParser(prog="mochi", description="Mochi: a tiny vector desktop pet (run without arguments to start it)")
     ap.add_argument("--version", action="version", version=f"mochi {__version__}")
+    ap.add_argument("-d", "--daemon", action="store_true", help="chạy ngầm trong tiến trình background (giải phóng terminal)")
     ap.add_argument("command", nargs="?", choices=["autostart", "pets"],
                     help="autostart: manage starting Mochi at login; pets: list the available characters")
     ap.add_argument("state", nargs="?", choices=["on", "off", "status"], default="status")
     args, _ = ap.parse_known_args(argv)                          # Qt may add its own options; leave them alone
+    if getattr(args, "daemon", False):
+        if hasattr(os, "fork"):
+            pid = os.fork()
+            if pid > 0:
+                print(f"Mochi đã được khởi chạy ngầm trong tiến trình (PID: {pid}).")
+                print("Dừng Mochi bất cứ lúc nào bằng lệnh: pkill -x mochi")
+                return True
+            os.setsid()
     if args.command == "pets":
         from .pets import available
         for pid, d in available().items(): print(f"{pid:12s} {d.name} ({d.kind}, {d.size}px)")
@@ -45,6 +54,7 @@ def main():
     from .platform import detect
 
     app = QApplication(sys.argv)
+    app.setQuitOnLastWindowClosed(False)
     logging.basicConfig(level=logging.INFO, format="%(name)s: %(levelname)s: %(message)s")
     for sig in (signal.SIGTERM, signal.SIGINT):
         signal.signal(sig, lambda *_: app.quit())          # `kill` / Ctrl-C -> clean exit (unloads the KWin script)
