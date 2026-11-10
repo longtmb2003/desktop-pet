@@ -9,6 +9,19 @@ if [ ! -f dist/mochi ] && [ ! -x dist/mochi/mochi ]; then
     scripts/build.sh
 fi
 
+# Check for Qt6 xcb runtime dependency on Linux (libxcb-cursor0)
+if ! (ldconfig -p 2>/dev/null || /sbin/ldconfig -p 2>/dev/null) | grep -q "libxcb-cursor.so.0"; then
+    if [ ! -f /usr/lib/x86_64-linux-gnu/libxcb-cursor.so.0 ] && [ ! -f /usr/lib64/libxcb-cursor.so.0 ] && [ ! -f /usr/lib/libxcb-cursor.so.0 ]; then
+        echo ">>> [!] Thiếu thư viện hệ thống 'libxcb-cursor0' (bắt buộc cho Qt6 xcb plugin)."
+        if command -v apt-get >/dev/null 2>&1; then
+            echo ">>> Đang tự động cài đặt qua apt (có thể cần mật khẩu sudo):"
+            sudo apt-get update -qq && sudo apt-get install -y libxcb-cursor0 || {
+                echo ">>> Vui lòng tự cài đặt bằng lệnh: sudo apt install -y libxcb-cursor0" >&2
+            }
+        fi
+    fi
+fi
+
 APP="$HOME/.local/opt/mochi"
 BIN="$HOME/.local/bin/mochi"
 DATA="${XDG_DATA_HOME:-$HOME/.local/share}"
