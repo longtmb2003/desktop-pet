@@ -98,7 +98,7 @@ def draw_arm(p, coat, shoulder, target, width, kind="open", l1=36.0, l2=34.0, ha
 
     p.setPen(QPen(OUTLINE, 1.2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)); p.setBrush(Qt.NoBrush)
     for edge in (left, right):                                                       # the outline: the two long sides, from the shoulder on
-        line = QPainterPath(edge[1])
+        line = QPainterPath(); line.moveTo(edge[1])
         for pt in edge[2:]: line.lineTo(pt)
         p.drawPath(line)
 

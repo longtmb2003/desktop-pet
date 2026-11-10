@@ -749,3 +749,4 @@ class Pet(QWidget):
             font = p.font(); font.setBold(True); font.setPixelSize(11); p.setFont(font)
             p.drawText(QRect(bx, by, 16, 16), Qt.AlignCenter, "!")
             p.restore()
+        p.end()

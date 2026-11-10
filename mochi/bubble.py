@@ -123,10 +123,11 @@ class SpeechBubble(QWidget):
         w, h = self.width() - 2, self.height() - 2 - TAIL
         body = QPainterPath(); body.addRoundedRect(QRectF(1, 1, w, h), 10, 10)
         tx = 14 if self.on_right else w - 14 - 12                   # the pointer is on the side nearest the pet
-        tail = QPainterPath(QPointF(tx, h)); tail.lineTo(tx + 12, h); tail.lineTo(tx + (3 if self.on_right else 9), h + TAIL)
+        tail = QPainterPath(); tail.moveTo(tx, h); tail.lineTo(tx + 12, h); tail.lineTo(tx + (3 if self.on_right else 9), h + TAIL)
         tail.closeSubpath()
         # Catppuccin dark minimalist palette styling
         p.setPen(QPen(QColor(69, 71, 90, 230), 1.6)); p.setBrush(QColor(30, 30, 46, 245))
         p.drawPath(body.united(tail))
         p.setPen(QColor(205, 214, 244))
         p.drawText(QRect(1 + PAD, 1 + PAD, self.box.width() + 2, self.box.height() + 2), Qt.TextWordWrap, self.lines)
+        p.end()

@@ -92,7 +92,7 @@ def paint(pet, p):
 
     # tail
     wag = math.sin(t * (9 if happy else 4)) * (2 if sleep else 9)
-    tail = QPainterPath(QPointF(38, -22))
+    tail = QPainterPath(); tail.moveTo(38, -22)
     tail.cubicTo(70, -25, 72, -58 + wag, 58, -70 + wag)
     p.setPen(QPen(TAIL, 13, Qt.SolidLine, Qt.RoundCap)); p.setBrush(Qt.NoBrush); p.drawPath(tail)
 
@@ -100,7 +100,8 @@ def paint(pet, p):
     for m in (1, -1):
         p.save(); p.scale(m, 1)
         for col, k in ((EAR, 1), (PINK, .55)):
-            ear = QPainterPath(QPointF(-44 * k - 2, -52)); ear.lineTo(-38 * k - 2, -94 + 8 * (1 - k)); ear.lineTo(-14 * k - 6, -74)
+            ear = QPainterPath()
+            ear.moveTo(-44 * k - 2, -52); ear.lineTo(-38 * k - 2, -94 + 8 * (1 - k)); ear.lineTo(-14 * k - 6, -74)
             ear.closeSubpath()
             p.setPen(QPen(col, 8, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)); p.setBrush(col)
             if k < 1: p.translate(-1, 3)
@@ -130,13 +131,13 @@ def paint(pet, p):
             p.setPen(QPen(DARK, 2)); p.setBrush(Qt.white); p.drawEllipse(QPointF(x, -46), 9.5, 11)
             blob(DARK, x + lx * .4, -46 + ly * .4, 2.5, 3); continue
         if dizzy:                                                          # X eyes
-            arc = QPainterPath(QPointF(x - 6, -52)); arc.lineTo(x + 6, -40); arc.moveTo(x + 6, -52); arc.lineTo(x - 6, -40)
+            arc = QPainterPath(); arc.moveTo(x - 6, -52); arc.lineTo(x + 6, -40); arc.moveTo(x + 6, -52); arc.lineTo(x - 6, -40)
         elif sleep or act in (Action.YAWN, Action.STRETCH, Action.GROOM, Action.PUSH) or pet.blink > 0:
-            arc = QPainterPath(QPointF(x - 7, -46)); arc.quadTo(x, -40, x + 7, -46)
+            arc = QPainterPath(); arc.moveTo(x - 7, -46); arc.quadTo(x, -40, x + 7, -46)
         elif happy:
-            arc = QPainterPath(QPointF(x - 7, -43)); arc.quadTo(x, -53, x + 7, -43)
+            arc = QPainterPath(); arc.moveTo(x - 7, -43); arc.quadTo(x, -53, x + 7, -43)
         elif tired:                                                        # half-shut, drooping
-            arc = QPainterPath(QPointF(x - 7, -47 + (1 if x < 0 else 0))); arc.lineTo(x + 7, -44 - (1 if x < 0 else 0))
+            arc = QPainterPath(); arc.moveTo(x - 7, -47 + (1 if x < 0 else 0)); arc.lineTo(x + 7, -44 - (1 if x < 0 else 0))
         else:
             r = 1.2 if drag else 1
             blob(DARK, x + lx, -46 + ly, 7.5 * r, 9.5 * r)
@@ -150,7 +151,7 @@ def paint(pet, p):
     elif act is Action.PUSH: blob(PINK.darker(150), 0, -34, 5, 2.5)
     elif act is Action.YAWN: blob(PINK.darker(150), 0, -33, 4 + 3 * o, 2 + 8 * o)
     else:
-        mouth = QPainterPath(QPointF(-5, -38)); mouth.quadTo(-2.5, -33, 0, -38); mouth.quadTo(2.5, -33, 5, -38)
+        mouth = QPainterPath(); mouth.moveTo(-5, -38); mouth.quadTo(-2.5, -33, 0, -38); mouth.quadTo(2.5, -33, 5, -38)
         p.setPen(QPen(DARK, 2, Qt.SolidLine, Qt.RoundCap)); p.setBrush(Qt.NoBrush); p.drawPath(mouth)
 
     if act is Action.PUSH:                                           # both paws flat against the wall in front

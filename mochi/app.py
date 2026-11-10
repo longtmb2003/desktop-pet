@@ -29,6 +29,10 @@ def cli(argv):
 
 def main():
     if cli(sys.argv[1:]): return
+    # Prevent bundled glib from loading mismatched host GIO/GVFS modules
+    for var in ("GIO_MODULE_DIR", "GTK_PATH", "GDK_PIXBUF_MODULE_FILE"):
+        os.environ.pop(var, None)
+    os.environ["GIO_MODULE_DIR"] = "/dev/null"
     if os.environ.get("WAYLAND_DISPLAY"):
         os.environ.setdefault("QT_QPA_PLATFORM", "xcb")  # Wayland forbids self-positioning; XWayland allows it
     from PySide6.QtWidgets import QApplication
