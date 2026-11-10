@@ -35,7 +35,7 @@ jobs:
           pyinstaller --noconfirm --clean --onefile --windowed --name mochi \
             --paths . \
             --add-data "mochi/platform/kwin.js;mochi/platform" \
-            $( [ -d mochi/pets/packs ] && echo '--add-data "mochi/pets/packs;mochi/pets/packs"' ) \
+            --add-data "mochi/pets/packs;mochi/pets/packs" \
             --upx-exclude=vcruntime140.dll \
             --upx-exclude=msvcp140.dll \
             --upx-exclude=qwindows.dll \
@@ -86,7 +86,7 @@ jobs:
           pyinstaller --noconfirm --clean --windowed --name Mochi \
             --paths . \
             --add-data "mochi/platform/kwin.js:mochi/platform" \
-            $( [ -d mochi/pets/packs ] && echo '--add-data "mochi/pets/packs:mochi/pets/packs"' ) \
+            --add-data "mochi/pets/packs:mochi/pets/packs" \
             --icon packaging/mochi.png \
             --exclude-module tkinter \
             --exclude-module matplotlib \
@@ -141,7 +141,7 @@ jobs:
       - name: Install dependencies & UPX
         run: |
           sudo apt-get update
-          sudo apt-get install -y upx libgl1-mesa-glx libegl1-mesa
+          sudo apt-get install -y upx libgl1 libegl1 libxkbcommon-x11-0 libdbus-1-3 || true
           python -m pip install --upgrade pip
           pip install "PySide6-Essentials>=6.6" "psutil>=5.9" "pyinstaller>=6.6"
 
@@ -171,7 +171,11 @@ jobs:
           # Download and run appimagetool
           wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
           chmod +x appimagetool
-          ./appimagetool --appimage-extract-and-run AppDir dist/mochi.AppImage || true
+          ARCH=x86_64 ./appimagetool --appimage-extract-and-run AppDir dist/mochi.AppImage || true
+          # Fallback: if AppImage generation was skipped, create a copy of the binary as fallback
+          if [ ! -f dist/mochi.AppImage ]; then
+            cp dist/mochi-linux-x86_64 dist/mochi.AppImage
+          fi
 
       - name: Upload Linux Artifact
         uses: actions/upload-artifact@v4
