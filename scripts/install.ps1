@@ -5,9 +5,17 @@ $InstallDir = "$env:LOCALAPPDATA\Programs\Mochi"
 $Bin = "$InstallDir\mochi.exe"
 $Url = "https://github.com/longtmb2003/desktop-pet/releases/latest/download/mochi.exe"
 
-Write-Host ">>> Đang tải Mochi cho Windows..." -ForegroundColor Cyan
+Write-Host ">>> Đang tải Mochi cho Windows từ GitHub Releases..." -ForegroundColor Cyan
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-Invoke-WebRequest -Uri $Url -OutFile $Bin
+
+try {
+    Invoke-WebRequest -Uri $Url -OutFile $Bin
+} catch {
+    Write-Host ">>> [!] Chưa tìm thấy file release trên GitHub Releases." -ForegroundColor Yellow
+    Write-Host ">>>     (Nếu bạn vừa push tag, GitHub Actions đang chạy build tự động trên đám mây, mất khoảng 2-4 phút)." -ForegroundColor Yellow
+    Write-Host ">>>     Xem tiến trình build tại: https://github.com/longtmb2003/desktop-pet/actions" -ForegroundColor Yellow
+    exit 1
+}
 
 # Setup startup shortcut (tuỳ chọn)
 $StartupDir = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup"
