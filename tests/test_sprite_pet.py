@@ -1,6 +1,6 @@
 
 import pytest
-from conftest import HANHAN, render, uncovered_and_clipped, write_pack
+from conftest import render, uncovered_and_clipped, write_pack
 from PySide6.QtCore import QPoint
 
 from mochi.pets import MOCHI
@@ -251,24 +251,6 @@ def test_hearts_rise_from_above_the_head_of_whatever_it_is(make):
     m = make("mochi")
     m.grounded = True; m.enter(State()); m.pet_it()
     assert all(y == -95 for _, y, _ in m.hearts)                         # Mochi's hearts are exactly where they always were
-
-
-@pytest.mark.skipif(not (HANHAN / "pack.json").exists(), reason="the Hà Nhân pack is local-only (artwork not in the repository)")
-@pytest.mark.parametrize("scale", [0.6, 1.0, 1.7])
-def test_the_real_hanhan_pack_is_never_clipped_in_any_pose(qapp, tmp_path, make, scale):
-    real = load_dir(HANHAN)
-    p = make("hanhan", scale, {"mochi": MOCHI, "hanhan": real})
-    for facing in (1, -1):
-        for state in STATES:
-            for hot in (False, True):
-                for k in range(6):
-                    p.facing, p.state, p.hot, p.squash = facing, state, hot, 0.0
-                    p.grounded = state.motion not in (Motion.DRAG, Motion.AIRBORNE)
-                    p.t, p.began, p.dur, p.hearts = 10.0 + k * 0.53, 10.0, 3.0, []
-                    if state.action is Action.FLIP: p.t, p.began, p.dur = 10.0, 10.0 - 0.55 * k / 5, 0.55
-                    left, edge = uncovered_and_clipped(p)
-                    assert left < 40, f"not clickable (alpha {left}): {state} facing={facing} hot={hot} phase={k}"
-                    assert edge < 40, f"cut off by the window edge (alpha {edge}): {state} facing={facing} hot={hot} phase={k}"
 
 
 @pytest.mark.parametrize("prop", ["laptop", "sign"])

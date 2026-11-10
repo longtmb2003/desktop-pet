@@ -43,9 +43,6 @@ fi
 DATA_ARGS=(
     --add-data "mochi/platform/kwin.js:mochi/platform"
 )
-if [ -d mochi/pets/packs ]; then
-    DATA_ARGS+=(--add-data "mochi/pets/packs:mochi/pets/packs")
-fi
 
 EXCLUDES=(
     --exclude-module tkinter

@@ -35,7 +35,6 @@ jobs:
           pyinstaller --noconfirm --clean --onefile --windowed --name mochi \
             --paths . \
             --add-data "mochi/platform/kwin.js;mochi/platform" \
-            --add-data "mochi/pets/packs;mochi/pets/packs" \
             --upx-exclude=vcruntime140.dll \
             --upx-exclude=msvcp140.dll \
             --upx-exclude=qwindows.dll \
@@ -85,7 +84,6 @@ jobs:
           pyinstaller --noconfirm --clean --windowed --name Mochi \
             --paths . \
             --add-data "mochi/platform/kwin.js:mochi/platform" \
-            --add-data "mochi/pets/packs:mochi/pets/packs" \
             --icon packaging/mochi.png \
             --exclude-module tkinter \
             --exclude-module matplotlib \

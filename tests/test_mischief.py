@@ -2,7 +2,7 @@ import math
 from datetime import time
 
 import pytest
-from conftest import HANHAN, render, uncovered_and_clipped, write_pack
+from conftest import render, uncovered_and_clipped, write_pack
 from PySide6.QtCore import QPoint, QSettings
 
 import mochi.pet as mp
@@ -241,11 +241,10 @@ def test_wagging_and_lecturing_look_different_from_standing_and_from_each_other(
 
 
 def test_every_scolding_and_mischief_pose_is_clickable_and_inside_the_window_for_every_character(make, tmp_path, qapp):
-    """the window mask hides whatever it doesn't cover: check Mochi, a sprite and the real Hà Nhân in each new pose, both ways round"""
+    """the window mask hides whatever it doesn't cover: check Mochi and a sprite pet in each new pose, both ways round"""
     chars = [("mochi", {"mochi": MOCHI})]
     d = load_dir(write_pack(tmp_path / "sc", id="sc", scold=["x"], height=150))
     chars.append(("sc", {"mochi": MOCHI, "sc": d}))
-    if (HANHAN / "pack.json").exists(): chars.append(("hanhan", {"mochi": MOCHI, "hanhan": load_dir(HANHAN)}))
     for name, pets in chars:
         for scale in (1.0, 1.5):
             p = make(name, scale, pets)

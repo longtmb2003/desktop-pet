@@ -22,7 +22,7 @@
 - Click xuyên qua phần trong suốt quanh pet
 - 5 màu (Kem, Cam, Xám, Bạc hà, Hồng), được nhớ cho lần chạy sau
 - Bong bóng thoại: "Á!" khi hoảng sợ, thỉnh thoảng nói vu vơ, báo Pomodoro và thông báo từ chương trình khác. Có hàng đợi (tối đa 5), tự tắt sau vài giây, click xuyên qua, tự chọn bên trái/phải để không tràn màn hình
-- Pomodoro: chuột phải → Pomodoro → Bắt đầu. Khi tập trung, Mochi ngồi gõ laptop nhỏ (Hà Nhân thì cầm biển đỏ cấm "BẬN" lắc lư: đang bận, đừng làm phiền); hết giờ thì có bong bóng, tiếng chuông và chuyển sang giờ nghỉ (tự đặt độ dài trong Cài đặt)
+- Pomodoro: chuột phải → Pomodoro → Bắt đầu. Khi tập trung, Mochi ngồi gõ laptop nhỏ; hết giờ thì có bong bóng, tiếng chuông và chuyển sang giờ nghỉ (tự đặt độ dài trong Cài đặt)
 - Chỉ ngủ khi có lý do, không bao giờ ngủ ngẫu nhiên: lúc bạn khoá màn hình hoặc cho máy ngủ (thức dậy khi mở khoá, có lời chào), ngủ trưa từ 12:00 đến 13:30 và ngủ tối từ 22:00 đến 06:00 (giờ địa phương, chỉnh được trong Cài đặt). Vuốt ve thì nó dậy chơi rồi lại ngủ sau nửa phút; chọn một chế độ (trừ Ngủ) thì nó dậy ngay và không ngủ lại trong khung giờ đó, khung ngủ kế tiếp vẫn bình thường; đang Pomodoro thì nó vẫn ngồi gõ laptop. Từ 22:00 nó còn bớt chạy đuổi
 - Máy bận: nếu cài `psutil`, CPU trên 80% thì Mochi toát mồ hôi, đi chậm lại và giảm tốc độ vẽ; xuống dưới 65% mới hết (khoảng giữa hai ngưỡng để không nhấp nháy). Đọc CPU 8 giây một lần
 - Chế độ yên lặng: không nói vu vơ, không âm thanh, giảm tốc độ vẽ khi đứng yên. Tự bật khi có ứng dụng toàn màn hình (KDE), tắt được trong Cài đặt
@@ -38,9 +38,6 @@
 - Chế độ: Bình thường, Làm việc (ngồi gõ laptop suốt, ít nói, không chạy đuổi), Chơi đùa (hiếu động, hay chạy đuổi), Ngủ (ngủ liền, tắt tiếng), Yên lặng; và bạn lưu được cài đặt hiện tại thành chế độ của riêng mình. Đổi nhanh ở chuột phải → Chế độ
 - Màn hình nền: thả một file/icon lên Mochi thì nó phản ứng ("Nom nom! báo cáo.pdf ngon quá!"; nó không mở, không di chuyển, không xoá file); thỉnh thoảng nó nhận xét về một mục trên desktop
 - Nghịch ngợm trên cửa sổ bạn đang làm việc: khi bạn dùng một cửa sổ được một lúc (trên 15 giây), thỉnh thoảng (mỗi 1 đến 2,5 phút) Mochi nói một câu hợp với ứng dụng đó ("Bug đâu, ra đây!" với trình soạn code, "Mở bao nhiêu tab rồi?" với trình duyệt...), nhảy lên đỉnh cửa sổ và nghịch: nhún nhảy, nhảy múa, ngồi ở mép đung đưa chân, hoặc thò người nhìn xuống. Cửa sổ không đứng được (phóng to hết cỡ, che khuất, quá hẹp) thì nó nghịch ngay ở sàn. Không nghịch khi đang Pomodoro, yên lặng, đang ngủ hay vừa bị bạn vuốt ve; tắt được trong Cài đặt
-- Hà Nhân còn mắng bạn: chìa ngón tay chỉ thẳng vào con trỏ chuột, giơ ngón tay lắc "không được đâu", hoặc đi đi lại lại vung tay lên lớp, kèm câu mắng ("Làm việc đi, đừng có lười!")
-- Hà Nhân đi hướng nào thì mặt quay hướng đó, đổi chiều thì xoay người lại (không đi lùi)
-- Hà Nhân đi là **đạp xe ba bánh**: nhanh gấp đôi, bánh xe quay theo quãng đường, bụi và vạch gió phía sau, nhún nhảy và lấy đà nghiêng người khi quay đầu (xe "drift"), thỉnh thoảng bấm chuông "Ting ting!". Khi mắng hoặc cầm biển, cánh tay vẽ thay cho cánh tay đặt sau lưng trong ảnh gốc (dùng bản ảnh đã cắt cánh tay), nên không bao giờ có hai cánh tay một bên; cánh tay là một ống tay áo thon liền mạch có cổ tay áo trắng và bàn tay 5 ngón, theo tranh gốc của tác giả
 - Lời thoại hiện 2,5 đến 5 giây tuỳ độ dài
 - Chuột phải: Màu / Chế độ / Pomodoro / Nhắc việc / Chế độ yên lặng / Cài đặt / Nhân vật / Ngủ / Gọi về / Tạm dừng / Tự chạy khi đăng nhập / Thoát
 
@@ -117,29 +114,29 @@ Theo dõi CPU cần `psutil` (bản build sẵn có kèm; chạy từ mã nguồ
 
 **Màn hình nền**: KDE không cho biết icon nằm ở đâu trên màn hình, và Mochi không tự bật hỗ trợ tiếp cận (AT-SPI) của cả phiên làm việc chỉ để dò icon. Vì vậy Mochi làm việc với **nội dung thư mục desktop** (tên các mục, đọc `Name=` của lối tắt `.desktop`), không với vị trí. Nó không đi tới đứng cạnh từng icon.
 
-## Nhân vật (pet) và gói nhân vật
+## Nhân vật (pet) và gói nhân vật tuỳ biến
 
-Ngoài Mochi (vẽ bằng code), Mochi có thể hoá thân thành nhân vật khác: chuột phải → **Nhân vật**, hoặc trong Cài đặt. Liệt kê những gì có: `mochi pets`. Cỡ pet chỉnh trong Cài đặt (60% đến 200%).
+Mochi mặc định được vẽ bằng vector thuần tuý trong code, siêu nhẹ, mượt mà và sắc nét ở mọi độ phân giải màn hình. Cỡ pet có thể chỉnh trong Cài đặt (60% đến 200%).
 
-Mỗi nhân vật là **dữ liệu**, không phải code: kích thước, tốc độ, hành vi hay làm (trọng số), câu hay nói, tiếng kêu khi mất chỗ đứng, cách vẽ. Nhân vật dạng ảnh ("sprite") là một thư mục có `pack.json` cùng vài file PNG, đặt trong `~/.local/share/mochi-pet/pets/<tên>/`:
+Ngoài Mochi, bạn có thể tự thêm nhân vật ảnh ("sprite") của riêng mình bằng cách đặt một thư mục có `pack.json` cùng các file PNG vào `~/.local/share/mochi-pet/pets/<tên>/`:
 
 ```
-pack.json        khai báo (xem bên dưới)
+pack.json        khai báo thông số nhân vật (xem bên dưới)
 body.png         cả người, nền trong suốt, mép dưới chạm sàn, mặt để trống
 faces/*.png      các khuôn mặt vẽ đè lên (nét mực trên nền trong suốt): neutral (bắt buộc), talk, laugh
 ```
 
+Ví dụ một file `pack.json`:
+
 ```json
-{"id": "hanhan", "name": "Hà Nhân", "size": 240, "feet": 232, "height": 200, "walk_speed": 42,
- "body": "body.png", "face": {"box": [69, 162, 198, 172]},
- "faces": {"neutral": ["faces/neutral_00.png"], "talk": ["faces/talk_00.png", "faces/talk_01.png"], "laugh": ["faces/laugh_00.png"]},
- "fps": {"talk": 12}, "behaviors": {"idle": 4, "walk": 4, "sleep": 1, "chase": 1, "rant": 2},
- "chatter": ["Làm việc đi!"], "scream": "Trời ơi!", "sway": 4, "bob": 5, "work_prop": "sign"}
+{"id": "custom", "name": "Custom Pet", "size": 200, "feet": 190, "height": 150, "walk_speed": 45,
+ "body": "body.png", "face": {"box": [60, 50, 80, 80]},
+ "faces": {"neutral": ["faces/neutral_00.png"], "talk": ["faces/talk_00.png"], "laugh": ["faces/laugh_00.png"]},
+ "fps": {"talk": 8}, "behaviors": {"idle": 4, "walk": 4, "sleep": 1, "chase": 1},
+ "chatter": ["Xin chào!"], "scream": "Á!", "sway": 4, "bob": 4}
 ```
 
-Mochi chỉ đọc gói, không chạy code trong đó. Gói sai (thiếu ảnh, số lạ, đường dẫn chui ra ngoài thư mục) bị bỏ qua kèm cảnh báo, không làm Mochi hỏng. Ảnh chỉ được chuyển động bằng phép biến đổi (nhún, nghiêng, lộn, nằm xuống) và đổi mặt; biểu cảm ngủ và chóng mặt do Mochi tự vẽ lên khuôn mặt.
-
-`scripts/make_hanhan.py` là ví dụ dựng một gói từ hai ảnh nguồn (cắt nền, xoá mặt gốc, biến bảng biểu cảm thành lớp mặt trong suốt). Hà Nhân là nhân vật hư cấu do AI tạo ra; ảnh nguồn nằm trong `packaging/` và gói đã dựng sẵn nằm trong `mochi/pets/packs/hanhan/`.
+Mochi chỉ đọc dữ liệu gói, không chạy code bên ngoài. Gói không hợp lệ sẽ được bỏ qua an toàn kèm cảnh báo.
 
 ## API DBus cho chương trình khác
 
@@ -243,9 +240,9 @@ Build lại icon / ảnh xem trước: `python scripts/make_icon.py`, `python sc
 - **v0.2:** ổn định, tách kiến trúc, đóng gói. (xong)
 - **v0.3:** ném pet bằng chuột (quán tính), va chạm cạnh màn hình, chóng mặt, lắc, double-click lộn vòng, hoảng sợ khi cửa sổ biến mất, đẩy tường. (xong)
 - **v0.4:** bong bóng thoại, Pomodoro, phản ứng theo giờ/CPU, API DBus, cửa sổ Cài đặt và chế độ yên lặng. (xong)
-- **v0.5:** nhân vật là dữ liệu: đổi được giữa Mochi và các gói ảnh (như Hà Nhân), mỗi nhân vật có cỡ, tốc độ, hành vi, lời thoại riêng; chỉnh cỡ pet. Chưa có: nhiều pet chạy cùng lúc. (xong)
+- **v0.5:** nhân vật là dữ liệu: hỗ trợ các gói ảnh sprite tuỳ biến, mỗi nhân vật có cỡ, tốc độ, hành vi, lời thoại riêng; chỉnh cỡ pet. Chưa có: nhiều pet chạy cùng lúc. (xong)
 - **v0.6:** nhắc việc tự đặt, chế độ có sẵn và tự tạo, tương tác với các mục trên màn hình nền (thả file, mở, nhận xét), lời thoại lâu hơn. (xong)
-- **v0.7:** Hà Nhân đạp xe ba bánh, tay vẽ có ống tay áo thon và bàn tay 5 ngón (mắng người, cầm biển "BẬN"), nghịch ngợm trên cửa sổ đang làm việc, lịch ngủ (khoá màn hình, ngủ trưa, ngủ tối), mặt cười lộ răng. (xong)
+- **v0.7:** Nghịch ngợm trên cửa sổ đang làm việc, lịch ngủ (khoá màn hình, ngủ trưa, ngủ tối), mặt cười lộ răng. (xong)
 - **v0.8 (bản này):** Giao diện Dark Minimalist phong cách Catppuccin Mocha, Báo thức linh hoạt có ID & Báo lại (Snooze 5–10 phút), Hỗ trợ Múi giờ (`zoneinfo`), Triết lý không làm phiền (chống cướp focus tuyệt đối, icon `!` tinh tế, fade-in/fade-out), Đa nền tảng Windows (`ctypes`) & macOS, Đóng gói 1-file click-to-run nén UPX và CI/CD GitHub Actions.
 
 ## License

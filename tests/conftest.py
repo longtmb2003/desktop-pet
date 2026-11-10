@@ -90,9 +90,6 @@ def fixed_time_of_day(monkeypatch):
     monkeypatch.setattr(mochi.pet, "datetime", Afternoon)
 
 
-HANHAN = Path(__file__).resolve().parent.parent / "mochi" / "pets" / "packs" / "hanhan"
-
-
 @pytest.fixture
 def pets(qapp, tmp_path):
     return {"mochi": MOCHI, "blob": load_dir(write_pack(tmp_path / "pack"))}

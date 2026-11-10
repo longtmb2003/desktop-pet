@@ -49,14 +49,6 @@ def test_a_broken_ride_or_body_free_is_refused_with_a_reason(qapp, tmp_path, bad
         load_dir(root)
 
 
-def test_the_real_hanhan_pack_has_arm_free_bodies_and_a_tricycle(qapp):
-    from conftest import HANHAN
-    if not (HANHAN / "pack.json").exists(): pytest.skip("no local Hà Nhân pack")
-    d = load_dir(HANHAN)
-    assert set(d.pack.free) == {"left", "right", "both"} and d.pack.ride and d.pack.ride.speed >= 1.5 and len(d.pack.ride.wheels) == 2
-    assert d.pack.free["both"].size() == d.pack.body.size()
-
-
 # ---- riding -------------------------------------------------------------------------------------------------------
 @pytest.mark.parametrize("state,expected", [
     (State(Motion.WALK), True), (State(Motion.WALK, action=Action.CHASE), True), (State(), False), (State(Motion.SLEEP), False),
@@ -214,13 +206,9 @@ def test_a_pack_without_a_grin_falls_back_to_its_neutral_face(qapp, tmp_path):
     assert d.pack.face("grin", 1.0) is d.pack.faces["neutral"][0]
 
 
-def test_a_pack_can_have_a_grin_and_the_real_pack_does(qapp, tmp_path):
-    from conftest import HANHAN
+def test_a_pack_can_have_a_grin(qapp, tmp_path):
     d = load_dir(write_pack(tmp_path / "g", id="g", faces={"neutral": ["faces/n.png"], "grin": ["faces/l.png"]}))
     assert d.pack.face("grin", 1.0) is d.pack.faces["grin"][0] and d.pack.face("grin", 1.0) is not d.pack.faces["neutral"][0]
-    if (HANHAN / "pack.json").exists():
-        real = load_dir(HANHAN).pack
-        assert "grin" in real.faces and real.face("grin", 0) is not real.faces["neutral"][0]
 
 
 # ---- holding the busy sign -----------------------------------------------------------------------------------------------
@@ -289,15 +277,10 @@ def test_the_sign_sways_from_side_to_side(make, tmp_path):
 
 
 # ---- the arm stays joined to the body --------------------------------------------------------------------------------------
-@pytest.mark.parametrize("who", ["synthetic", "hanhan"])
-def test_a_swinging_arm_is_never_cut_off_from_the_body(make, tmp_path, who, monkeypatch):
+def test_a_swinging_arm_is_never_cut_off_from_the_body(make, tmp_path, monkeypatch):
     """the picture is one piece: a gap between shoulder and sleeve would leave the arm floating as a piece of its own"""
-    from conftest import HANHAN, components
-    if who == "hanhan":
-        if not (HANHAN / "pack.json").exists(): pytest.skip("no local Hà Nhân pack")
-        p = make("hanhan", 1.0, {"mochi": MOCHI, "hanhan": load_dir(HANHAN)})
-    else:
-        p = make_pet(make, tmp_path)
+    from conftest import components
+    p = make_pet(make, tmp_path)
     p.grounded, p.hot, p.squash, p.hearts, p.dur, p.began = True, False, 0.0, [], 4.0, 10.0
     from PySide6.QtCore import QPoint as P
     for pointer in ((500, 0), (-400, 100), (300, -200), (20, 400)):                    # the pointer in all directions
@@ -307,7 +290,7 @@ def test_a_swinging_arm_is_never_cut_off_from_the_body(make, tmp_path, who, monk
                 for k in range(10):
                     p.state, p.facing, p.drawn_facing, p.t = State(action=action), facing, facing, 10.0 + k * 0.11
                     n = components(render(p))
-                    assert n == 1, f"{who} {action.name} facing={facing} pointer={pointer} phase={k}: {n} separate pieces"
+                    assert n == 1, f"{action.name} facing={facing} pointer={pointer} phase={k}: {n} separate pieces"
 
 
 def test_a_pack_says_where_its_arms_are_rooted_and_bad_values_are_refused(qapp, tmp_path):
