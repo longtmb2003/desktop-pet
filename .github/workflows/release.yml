@@ -78,8 +78,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install "PySide6-Essentials>=6.6" "psutil>=5.9" "pyinstaller>=6.6" pyobjc-framework-Quartz pyobjc-framework-Cocoa
-          brew install create-dmg || true
+          pip install "PySide6-Essentials>=6.6" "psutil>=5.9" "pyinstaller>=6.6" Pillow pyobjc-framework-Quartz pyobjc-framework-Cocoa
 
       - name: Build macOS app bundle with PyInstaller
         run: |
@@ -106,18 +105,7 @@ jobs:
         run: |
           mkdir -p dist/dmg
           cp -r dist/Mochi.app dist/dmg/
-          if command -v create-dmg >/dev/null 2>&1; then
-            create-dmg \
-              --volname "Mochi Desktop Pet" \
-              --window-pos 200 120 \
-              --window-size 600 400 \
-              --icon-size 100 \
-              --app-drop-link 425 200 \
-              "dist/mochi.dmg" \
-              "dist/dmg/" || hdiutil create -volname "Mochi" -srcfolder dist/dmg -ov -format UDZO dist/mochi.dmg
-          else
-            hdiutil create -volname "Mochi" -srcfolder dist/dmg -ov -format UDZO dist/mochi.dmg
-          fi
+          hdiutil create -volname "Mochi" -srcfolder dist/dmg -ov -format UDZO dist/mochi.dmg
 
       - name: Upload macOS Artifact
         uses: actions/upload-artifact@v4
