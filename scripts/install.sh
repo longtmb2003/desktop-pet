@@ -2,7 +2,12 @@
 # Install the built app (dist/mochi) for the current user. No root needed. Usage: scripts/install.sh [--autostart]
 set -euo pipefail
 cd "$(dirname "$0")/.."
-[ -x dist/mochi/mochi ] || { echo "dist/mochi/mochi not found: run scripts/build.sh first" >&2; exit 1; }
+
+# Check if already built, if not, build it automatically
+if [ ! -f dist/mochi ] && [ ! -x dist/mochi/mochi ]; then
+    echo "dist/mochi not found. Running scripts/build.sh..."
+    scripts/build.sh
+fi
 
 APP="$HOME/.local/opt/mochi"
 BIN="$HOME/.local/bin/mochi"
@@ -11,7 +16,17 @@ CONF="${XDG_CONFIG_HOME:-$HOME/.config}"
 
 pkill -x mochi 2>/dev/null || true                            # a running copy would keep the old files open
 rm -rf "$APP" && mkdir -p "$APP" "$(dirname "$BIN")" "$DATA/applications" "$DATA/icons/hicolor/256x256/apps"
-cp -a dist/mochi/. "$APP"/
+
+# Handle both onefile (dist/mochi file) and onedir (dist/mochi/ directory)
+if [ -f dist/mochi ] && [ -x dist/mochi ]; then
+    cp -a dist/mochi "$APP/mochi"
+elif [ -x dist/mochi/mochi ]; then
+    cp -a dist/mochi/. "$APP"/
+else
+    echo "Error: Could not locate built mochi binary in dist/" >&2
+    exit 1
+fi
+
 ln -sf "$APP/mochi" "$BIN"
 cp packaging/mochi.png "$DATA/icons/hicolor/256x256/apps/mochi.png"
 sed "s|@BIN@|\"$APP/mochi\"|" packaging/mochi.desktop > "$DATA/applications/mochi.desktop"
