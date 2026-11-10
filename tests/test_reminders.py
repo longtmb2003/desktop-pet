@@ -94,3 +94,34 @@ def test_untrusted_json_is_cleaned_or_skipped_and_never_raises():
 def test_describe_reads_naturally():
     assert Reminder("Uống nước", "every", 45).describe() == "Uống nước  —  mỗi 45 phút"
     assert "09:30" in Reminder("Họp", "daily", at="09:30").describe() and "[tắt]" in Reminder("x", enabled=False).describe()
+
+
+def test_snooze_delays_reminder():
+    r = Reminder("Uống nước", "every", 45, id="water1")
+    c, s = sched(r)
+    s.snooze(r, minutes=5)
+    assert s.due() == []
+    c.advance(5 * 60 - 1)
+    assert s.due() == []
+    c.advance(2)
+    assert [x.text for x in s.due()] == ["Uống nước"]
+    assert s.due() == []
+
+
+def test_snooze_by_id():
+    r = Reminder("Uống nước", "every", 45, id="water1")
+    c, s = sched(r)
+    assert s.snooze_by_id("water1", minutes=10) is True
+    assert s.snooze_by_id("nonexistent", minutes=10) is False
+    c.advance(10 * 60)
+    assert [x.id for x in s.due()] == ["water1"]
+
+
+def test_reminder_with_id_round_trip():
+    r = Reminder("Họp", "daily", at="10:00", id="meeting-42")
+    raw = dump([r])
+    parsed = parse(raw)
+    assert len(parsed) == 1
+    assert parsed[0].id == "meeting-42"
+    assert parsed[0].text == "Họp"
+

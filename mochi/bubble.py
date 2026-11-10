@@ -1,9 +1,9 @@
 """Speech bubble: a separate click-through window that follows the pet, so the pet's own 160x160 window and physics never change."""
 from collections import deque
 
-from PySide6.QtCore import QPointF, QRect, QRectF, Qt, QTimer
+from PySide6.QtCore import QEasingCurve, QPointF, QPropertyAnimation, QRect, QRectF, Qt, QTimer
 from PySide6.QtGui import QColor, QFontMetrics, QPainter, QPainterPath, QPen
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QGraphicsOpacityEffect, QWidget
 
 from .physics import FEET, S
 
@@ -62,13 +62,20 @@ class BubbleQueue:
 class SpeechBubble(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool | Qt.WindowTransparentForInput)
+        flags = (Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool
+                 | Qt.WindowTransparentForInput | Qt.WindowDoesNotAcceptFocus)
+        self.setWindowFlags(flags)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
         self.setAttribute(Qt.WA_TransparentForMouseEvents)        # never steals a click from what's underneath
         self.queue, self.on_right, self.lines, self.box = BubbleQueue(), True, "", QRect()
         self.phase = "idle"                                        # idle -> show -> gap -> show ... -> idle
         self.timer = QTimer(self, singleShot=True, timeout=self.advance)   # the only timer
+
+        self.opacity_effect = QGraphicsOpacityEffect(self)
+        self.setGraphicsEffect(self.opacity_effect)
+        self.anim = QPropertyAnimation(self.opacity_effect, b"opacity")
+        self.anim.setDuration(160)
 
     def say(self, text, urgent=False):
         if self.queue.push(text, urgent) and self.phase == "idle": self.advance()
@@ -85,11 +92,23 @@ class SpeechBubble(QWidget):
         r = fm.boundingRect(QRect(0, 0, MAX_W, 1000), Qt.TextWordWrap, text)
         self.lines, self.box = text, r
         self.resize(r.width() + 2 * PAD + 2, r.height() + 2 * PAD + TAIL + 2)
-        self.show(); self.update()
+        self.show()
+        self.update()
+        self.anim.stop()
+        self.anim.setStartValue(0.0)
+        self.anim.setEndValue(1.0)
+        self.anim.setEasingCurve(QEasingCurve.OutCubic)
+        self.anim.start()
         self.timer.start(show_ms(text))
+
+    def hide(self):
+        self.anim.stop()
+        self.opacity_effect.setOpacity(0.0)
+        super().hide()
 
     def dismiss(self):
         """drop everything (quiet mode, or the pet went to sleep)"""
+        self.anim.stop()
         self.queue.clear(); self.timer.stop(); self.phase = "idle"; self.hide()
 
     def follow(self, px, py, g, size=S, top=FEET - 106):
@@ -106,7 +125,8 @@ class SpeechBubble(QWidget):
         tx = 14 if self.on_right else w - 14 - 12                   # the pointer is on the side nearest the pet
         tail = QPainterPath(QPointF(tx, h)); tail.lineTo(tx + 12, h); tail.lineTo(tx + (3 if self.on_right else 9), h + TAIL)
         tail.closeSubpath()
-        p.setPen(QPen(QColor(70, 60, 90), 1.6)); p.setBrush(QColor(255, 252, 248, 240))
+        # Catppuccin dark minimalist palette styling
+        p.setPen(QPen(QColor(69, 71, 90, 230), 1.6)); p.setBrush(QColor(30, 30, 46, 245))
         p.drawPath(body.united(tail))
-        p.setPen(QColor(50, 42, 70))
+        p.setPen(QColor(205, 214, 244))
         p.drawText(QRect(1 + PAD, 1 + PAD, self.box.width() + 2, self.box.height() + 2), Qt.TextWordWrap, self.lines)

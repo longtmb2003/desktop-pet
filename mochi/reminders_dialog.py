@@ -4,6 +4,7 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFormLayout, QHBox
                                QSpinBox, QTimeEdit, QVBoxLayout, QWidget)
 
 from . import reminders as rem
+from .style import apply_theme
 
 DAYS = ("T2", "T3", "T4", "T5", "T6", "T7", "CN")
 
@@ -13,11 +14,19 @@ class RemindersDialog(QDialog):
         super().__init__()
         self.pet, self.items = pet, rem.parse(pet.cfg.reminders)
         self.setWindowTitle("Mochi: Nhắc việc")
+        apply_theme(self)
         lay = QVBoxLayout(self)
-        lay.addWidget(QLabel("Mochi sẽ nói câu nhắc bằng bong bóng thoại (kèm tiếng chuông nếu bật âm thanh)."))
+        lay.setContentsMargins(16, 16, 16, 16)
+        lay.setSpacing(10)
+
+        header = QLabel("Mochi sẽ nhắc bằng bong bóng thoại nhẹ nhàng (kèm tiếng chuông nếu bật âm thanh).")
+        header.setWordWrap(True)
+        lay.addWidget(header)
         self.list = QListWidget(); lay.addWidget(self.list)
 
-        self.form = form = QFormLayout(); lay.addLayout(form)
+        self.form = form = QFormLayout()
+        form.setSpacing(8)
+        lay.addLayout(form)
         self.text = QLineEdit(); self.text.setPlaceholderText("Ví dụ: Uống nước đi!"); self.text.setMaxLength(rem.MAX_TEXT)
         self.kind = QComboBox(); self.kind.addItem("Lặp lại sau mỗi ... phút", "every"); self.kind.addItem("Hằng ngày vào lúc ...", "daily")
         self.minutes = QSpinBox(); self.minutes.setRange(1, 1440); self.minutes.setValue(45); self.minutes.setSuffix(" phút")
@@ -31,7 +40,10 @@ class RemindersDialog(QDialog):
         form.addRow("Lúc", self.at); form.addRow("Các ngày", self.days_row); form.addRow(self.enabled)
 
         buttons = QHBoxLayout(); lay.addLayout(buttons)
-        self.add, self.update_btn, self.delete, self.test = (QPushButton(t) for t in ("Thêm", "Cập nhật", "Xoá", "Thử ngay"))
+        buttons.setSpacing(8)
+        self.add = QPushButton("Thêm")
+        self.add.setProperty("primary", "true")
+        self.update_btn, self.delete, self.test = (QPushButton(t) for t in ("Cập nhật", "Xoá", "Thử ngay"))
         for b in (self.add, self.update_btn, self.delete, self.test): buttons.addWidget(b)
         self.status = QLabel(""); lay.addWidget(self.status)
 
@@ -47,12 +59,13 @@ class RemindersDialog(QDialog):
         for w, on in ((self.minutes, not daily), (self.at, daily), (self.days_row, daily)):
             w.setVisible(on); self.form.labelForField(w).setVisible(on)                  # hide the label with its field
 
-    def from_form(self):
+    def from_form(self, existing_id=""):
         """the Reminder the form describes, or None (with a message) if it isn't usable yet"""
         days = tuple(i for i, b in enumerate(self.days) if b.isChecked())
         try:
-            return rem.from_dict({"text": self.text.text(), "kind": self.kind.currentData(), "minutes": self.minutes.value(),
-                                  "at": self.at.time().toString("HH:mm"), "days": days, "enabled": self.enabled.isChecked()})
+            return rem.from_dict({"id": existing_id, "text": self.text.text(), "kind": self.kind.currentData(),
+                                  "minutes": self.minutes.value(), "at": self.at.time().toString("HH:mm"),
+                                  "days": days, "enabled": self.enabled.isChecked()})
         except ValueError as e:
             msgs = {"empty text": "Hãy nhập nội dung nhắc.", "days must be a list of 0-6": "Chọn ít nhất một ngày."}
             self.status.setText(msgs.get(str(e), str(e)))
@@ -85,8 +98,11 @@ class RemindersDialog(QDialog):
         self.items.append(r); self.save(); self.refresh(len(self.items) - 1)
 
     def on_update(self):
-        row, r = self.list.currentRow(), self.from_form()
-        if r is None or not 0 <= row < len(self.items): return
+        row = self.list.currentRow()
+        if not 0 <= row < len(self.items): return
+        curr = self.items[row]
+        r = self.from_form(existing_id=curr.id)
+        if r is None: return
         self.items[row] = r; self.save(); self.refresh(row)
 
     def on_delete(self):

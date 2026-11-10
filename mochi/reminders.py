@@ -1,6 +1,7 @@
 """Reminders the user sets up: pure scheduling with injectable clocks, no Qt. Stored as JSON text in Settings."""
 import json
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -11,6 +12,10 @@ GRACE = 300                                    # a daily reminder still fires up
 ALL_DAYS = (0, 1, 2, 3, 4, 5, 6)               # Monday = 0
 
 
+def generate_id():
+    return uuid.uuid4().hex[:8]
+
+
 @dataclass(frozen=True)
 class Reminder:
     text: str
@@ -19,6 +24,7 @@ class Reminder:
     at: str = "09:00"
     days: tuple = ALL_DAYS
     enabled: bool = True
+    id: str = ""
 
     def clock(self):
         """the daily time as (hour, minute)"""
@@ -52,7 +58,8 @@ def from_dict(d):
     ok = isinstance(days, (list, tuple)) and days and all(isinstance(x, int) and not isinstance(x, bool) and 0 <= x <= 6 for x in days)
     if not ok: raise ValueError("days must be a list of 0-6")
     h, m = at.split(":")
-    return Reminder(text, kind, minutes, f"{int(h):02d}:{m}", tuple(sorted(set(days))), bool(d.get("enabled", True)))
+    rem_id = str(d.get("id", "")).strip()[:64]
+    return Reminder(text, kind, minutes, f"{int(h):02d}:{m}", tuple(sorted(set(days))), bool(d.get("enabled", True)), rem_id)
 
 
 def parse(raw):
@@ -71,14 +78,27 @@ def parse(raw):
 
 
 def dump(reminders):
-    return json.dumps([{"text": r.text, "kind": r.kind, "minutes": r.minutes, "at": r.at, "days": list(r.days), "enabled": r.enabled}
+    return json.dumps([{"id": r.id, "text": r.text, "kind": r.kind, "minutes": r.minutes, "at": r.at,
+                        "days": list(r.days), "enabled": r.enabled}
                        for r in reminders[:MAX_REMINDERS]], ensure_ascii=False)
 
 
 class Scheduler:
     def __init__(self, reminders=(), mono=time.monotonic, now=datetime.now):
         self.mono, self.now, self.items, self.state = mono, now, [], {}
+        self.snoozed = []                       # list of (Reminder, trigger_mono)
         self.replace(reminders)
+
+    def snooze(self, reminder, minutes=5):
+        """delay a reminder to fire again in `minutes` minutes"""
+        self.snoozed.append((reminder, self.mono() + minutes * 60))
+
+    def snooze_by_id(self, rem_id, minutes=5):
+        for r in self.items:
+            if r.id == rem_id:
+                self.snooze(r, minutes)
+                return True
+        return False
 
     def replace(self, reminders):
         """switch to a new list; a reminder that is unchanged keeps its place in the schedule (editing one doesn't restart the rest)"""
@@ -89,6 +109,14 @@ class Scheduler:
     def due(self):
         """the reminders that fire right now (each once); call as often as you like"""
         out, mono, now = [], self.mono(), self.now()
+        still_snoozed = []
+        for r, fire_mono in self.snoozed:
+            if mono >= fire_mono:
+                out.append(r)
+            else:
+                still_snoozed.append((r, fire_mono))
+        self.snoozed = still_snoozed
+
         for r in self.items:
             if not r.enabled: continue
             st = self.state[r]
@@ -97,7 +125,8 @@ class Scheduler:
                     out.append(r); st["next"] = mono + r.minutes * 60             # no catching up on the ones missed while stalled
             elif now.weekday() in r.days and st["fired"] != now.date():
                 h, m = r.clock()
-                late = (now - now.replace(hour=h, minute=m, second=0, microsecond=0)).total_seconds()
+                target_today = now.replace(hour=h, minute=m, second=0, microsecond=0)
+                late = (now - target_today).total_seconds()
                 if 0 <= late <= GRACE:
                     out.append(r); st["fired"] = now.date()
         return out

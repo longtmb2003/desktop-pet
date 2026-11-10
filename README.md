@@ -27,6 +27,14 @@
 - Máy bận: nếu cài `psutil`, CPU trên 80% thì Mochi toát mồ hôi, đi chậm lại và giảm tốc độ vẽ; xuống dưới 65% mới hết (khoảng giữa hai ngưỡng để không nhấp nháy). Đọc CPU 8 giây một lần
 - Chế độ yên lặng: không nói vu vơ, không âm thanh, giảm tốc độ vẽ khi đứng yên. Tự bật khi có ứng dụng toàn màn hình (KDE), tắt được trong Cài đặt
 - Nhắc việc do bạn tự đặt: lặp lại sau mỗi N phút ("Uống nước đi!") hoặc hằng ngày vào giờ nhất định, chọn được các ngày trong tuần. Đến hạn Mochi nói câu nhắc bằng bong bóng, nhún nhảy và kêu chuông (trừ khi yên lặng hoặc tắt âm). Chuột phải → Nhắc việc...
+- **Báo thức linh hoạt & Báo lại (Snooze)**: Dữ liệu JSON có ID riêng biệt; khi có nhắc nhở, bạn có thể click chuột phải vào pet chọn hoãn lại 5–10 phút (Snooze), trải nghiệm tiện lợi như báo thức điện thoại
+- **Hỗ trợ Múi giờ (Timezone)**: Dùng `zoneinfo` chuẩn của Python 3.9+, hỗ trợ chọn múi giờ (`Asia/Ho_Chi_Minh`, `UTC`, v.v.) trong Cài đặt để lịch ngủ và báo thức luôn chuẩn xác cho người dùng làm việc từ xa
+- **Giao diện Dark Minimalist (Catppuccin)**: Các hộp thoại Cài đặt, Nhắc việc và menu chuột phải khoác phong cách Catppuccin Mocha tối giản, bo tròn góc 8–10px, hiệu ứng hover nhẹ nhàng, loại bỏ hoàn toàn viền sắc cạnh mặc định của Qt
+- **Triết lý "Không làm phiền" (Do Not Disturb)**:
+  - *Chống cướp focus tuyệt đối*: Cửa sổ pet và bong bóng thoại dùng cờ `Qt.WindowDoesNotAcceptFocus` và `Qt.WA_ShowWithoutActivating`, không bao giờ cướp con trỏ hay làm ngắt quãng khi bạn đang gõ code hoặc văn bản
+  - *Cảnh báo thị giác tinh tế*: Khi đến giờ nhắc việc, Mochi nhún nhảy và hiện huy hiệu icon `!` nhỏ nhắn trên đầu; người dùng rảnh tay có thể click vào để xem
+  - *Hiệu ứng chuyển cảnh mềm mại*: Dùng `QPropertyAnimation` (fade-in / fade-out) mượt mà cho bong bóng thoại thay vì bật/tắt đột ngột
+  - *Âm thanh êm ái*: Âm chuông/pop cực ngắn và nhẹ nhàng trên Linux, Windows, macOS; tuân thủ nghiêm ngặt chế độ yên lặng (Quiet Mode)
 - Chế độ: Bình thường, Làm việc (ngồi gõ laptop suốt, ít nói, không chạy đuổi), Chơi đùa (hiếu động, hay chạy đuổi), Ngủ (ngủ liền, tắt tiếng), Yên lặng; và bạn lưu được cài đặt hiện tại thành chế độ của riêng mình. Đổi nhanh ở chuột phải → Chế độ
 - Màn hình nền: thả một file/icon lên Mochi thì nó phản ứng ("Nom nom! báo cáo.pdf ngon quá!"; nó không mở, không di chuyển, không xoá file); thỉnh thoảng nó nhận xét về một mục trên desktop
 - Nghịch ngợm trên cửa sổ bạn đang làm việc: khi bạn dùng một cửa sổ được một lúc (trên 15 giây), thỉnh thoảng (mỗi 1 đến 2,5 phút) Mochi nói một câu hợp với ứng dụng đó ("Bug đâu, ra đây!" với trình soạn code, "Mở bao nhiêu tab rồi?" với trình duyệt...), nhảy lên đỉnh cửa sổ và nghịch: nhún nhảy, nhảy múa, ngồi ở mép đung đưa chân, hoặc thò người nhìn xuống. Cửa sổ không đứng được (phóng to hết cỡ, che khuất, quá hẹp) thì nó nghịch ngay ở sàn. Không nghịch khi đang Pomodoro, yên lặng, đang ngủ hay vừa bị bạn vuốt ve; tắt được trong Cài đặt
@@ -40,20 +48,26 @@
 
 | Môi trường | Trạng thái |
 |---|---|
-| KDE Plasma 6, Wayland (qua XWayland) | Đầy đủ: đi trên cửa sổ. Đã thử trên Fedora 44, Plasma 6.7, 2 màn hình (scale 1) |
-| Linux khác (X11, GNOME…) | Chạy ở chế độ "floor-only": chỉ đi trên sàn màn hình. Chưa kiểm tra trên máy thật |
-| Windows / macOS | Chưa hỗ trợ và chưa thử |
+| KDE Plasma 6, Wayland (qua XWayland) | Đầy đủ: đi trên cửa sổ thông qua kwin.js và DBus |
+| Windows 10 / 11 | Đầy đủ: Win32 API trực tiếp qua `ctypes` (`EnumWindows`, `GetWindowRect`, DWM cloaked check, phát hiện toàn màn hình, chống chạy đè bằng Named Mutex) |
+| macOS | Hỗ trợ qua Quartz / CoreGraphics và Accessibility API |
+| Môi trường khác / kẹt quyền | Tự động lui về chế độ an toàn "floor-only" (chỉ đi lại trên sàn màn hình / thanh Taskbar / Dock) |
 
 Chưa kiểm tra: fractional scaling và nhiều màn hình có scale khác nhau. Qt/XWayland xử lý toạ độ ở các trường hợp này khác nhau, nên pet có thể lệch vị trí so với cửa sổ.
 
-## Cài đặt
+## Cài đặt & Phân phối
 
-Cần Python ≥ 3.10 và Linux. Chưa có bản phát hành dựng sẵn, nên hiện tại bạn tự build (một lệnh, khoảng 15 giây, cần mạng lần đầu):
+Bạn có thể tải trực tiếp các bản đóng gói 1-file click-to-run phát hành tự động qua GitHub Actions từ mục [Releases](https://github.com/longtmb2003/desktop-pet/releases):
+- `mochi.exe`: Dành cho Windows (tải về nhấp đúp chạy ngay)
+- `mochi.dmg`: Dành cho macOS (kéo thả vào thư mục Applications)
+- `mochi.AppImage` & `mochi-linux-x86_64`: Dành cho Linux (cấp quyền thực thi và chạy)
+
+Hoặc tự build từ mã nguồn:
 
 ```sh
 git clone https://github.com/longtmb2003/desktop-pet
 cd desktop-pet
-scripts/build.sh                 # tạo dist/mochi/ (~160 MB, chạy được không cần cài Python)
+scripts/build.sh --onefile       # tạo 1 file duy nhất dist/mochi (đã nén UPX và loại bỏ Qt bloat)
 scripts/install.sh --autostart   # cài cho riêng bạn vào ~/.local; bỏ --autostart nếu không muốn tự chạy khi đăng nhập
 ```
 
@@ -169,11 +183,12 @@ mochi/
 ├── reminders.py  lịch nhắc việc (logic thuần, đồng hồ tiêm được); reminders_dialog.py là cửa sổ chỉnh
 ├── modes.py      chế độ (có sẵn và của riêng bạn)
 ├── desktop.py    các mục trên màn hình nền (tên, mở)
-├── sound.py      tiếng chuông
+├── sound.py      tiếng chuông (Linux, Windows, macOS)
 ├── renderer.py   vẽ vector, màu, vùng click
+├── style.py      giao diện Catppuccin dark minimalist (QSS)
 ├── settings.py   lưu cài đặt (QSettings)
 ├── autostart.py  mục autostart XDG
-└── platform/     nguồn thông tin cửa sổ: base (chỉ sàn) và kde (KWin qua DBus, kwin.js)
+└── platform/     nguồn thông tin cửa sổ: base (chỉ sàn), kde (KWin), windows (Win32 ctypes) và macos (Quartz)
 ```
 
 Build lại icon / ảnh xem trước: `python scripts/make_icon.py`, `python scripts/make_preview.py`.
@@ -181,21 +196,21 @@ Build lại icon / ảnh xem trước: `python scripts/make_icon.py`, `python sc
 ## Cách hoạt động và quyền truy cập thông tin cửa sổ
 
 - Trên Wayland, app thường không được tự đặt vị trí cửa sổ, nên Mochi ép Qt chạy qua XWayland (`QT_QPA_PLATFORM=xcb`), và chỉ làm vậy khi có `WAYLAND_DISPLAY`.
-- Để biết vị trí các cửa sổ khác, Mochi nạp `kwin.js` vào KWin qua DBus. Script này chạy **bên trong KWin**, nên có quyền đọc mọi cửa sổ, nhưng nó chỉ gửi cho Mochi **id nội bộ và toạ độ/kích thước** của các cửa sổ thường đang hiển thị (không gửi tiêu đề, nội dung hay tên ứng dụng), theo thứ tự xếp chồng, và chỉ khi có thay đổi.
-- Dữ liệu đi qua session bus tại dịch vụ `org.mochi.Pet`. Bất kỳ tiến trình nào trong phiên của bạn cũng gọi được dịch vụ này, nên Mochi kiểm tra từng bản tin (bỏ mục sai, từ chối bản tin không phải danh sách, giới hạn log) và không bao giờ bị crash vì dữ liệu xấu.
-- Khi thoát bình thường, Mochi gỡ script khỏi KWin. Nếu bị crash, script còn sót sẽ được gỡ ở lần chạy sau.
-- Giới hạn của KWin API: chỉ các cửa sổ `normalWindow` được xét; popup, panel, tooltip không tính. Cửa sổ rộng dưới 80 px không dùng làm chỗ đứng.
-- Ngoài KDE hoặc khi KWin/DBus không có, pet vẫn chạy và chỉ đi trên sàn màn hình.
+- Để biết vị trí các cửa sổ khác:
+  - **Linux (KDE Plasma)**: Mochi nạp `kwin.js` vào KWin qua DBus. Script này chỉ gửi id nội bộ và toạ độ của cửa sổ đang hiển thị theo thứ tự xếp chồng, không đọc tiêu đề hay nội dung.
+  - **Windows**: Mochi gọi trực tiếp Win32 API (`EnumWindows`, `GetWindowRect`) qua module `ctypes` chuẩn, kiểm tra cửa sổ ảo DWM (`DWMWA_CLOAKED`) và trạng thái toàn màn hình.
+  - **macOS**: Sử dụng Quartz / Accessibility API để lấy toạ độ các cửa sổ đang mở.
+- Ngoài KDE/Windows hoặc khi kẹt quyền truy cập, Mochi tự động lui về chế độ an toàn `floor-only` (chỉ đi lại trên sàn màn hình / thanh Taskbar / Dock).
 
 ## Xử lý sự cố
 
 | Triệu chứng | Cách xử lý |
 |---|---|
-| `mochi: already running` | Đã có một bản đang chạy. Dừng nó: `pkill -x mochi` |
-| Pet không đứng lên cửa sổ | Kiểm tra script đã nạp: `gdbus call --session --dest org.kde.KWin --object-path /Scripting --method org.kde.kwin.Scripting.isScriptLoaded mochi` phải in `(true,)`. Chạy `mochi` từ terminal để xem log |
+| `mochi: already running` | Đã có một bản đang chạy. Dừng nó: `pkill -x mochi` (trên Windows: tắt qua Task Manager) |
+| Pet không đứng lên cửa sổ | Trên KDE: kiểm tra script đã nạp (`gdbus call --session --dest org.kde.KWin --object-path /Scripting --method org.kde.kwin.Scripting.isScriptLoaded mochi`). Trên Windows/macOS: đảm bảo app có quyền truy cập cửa sổ desktop |
 | `Could not load the Qt platform plugin "xcb"` | Thiếu thư viện hệ thống: Fedora `sudo dnf install xcb-util-cursor`, Debian/Ubuntu `sudo apt install libxcb-cursor0` |
 | Pet kẹt ngoài màn hình | Chuột phải → "Gọi về". Nếu không chạm được vào pet: `pkill -x mochi` rồi chạy lại. Khi rút màn hình, pet tự về màn hình chính |
-| Không có KDE | Bình thường: chế độ floor-only, chỉ đi trên sàn |
+| Không có KDE / Windows API | Bình thường: chế độ floor-only, chỉ đi trên sàn |
 
 ## Lộ trình
 
@@ -204,7 +219,8 @@ Build lại icon / ảnh xem trước: `python scripts/make_icon.py`, `python sc
 - **v0.4:** bong bóng thoại, Pomodoro, phản ứng theo giờ/CPU, API DBus, cửa sổ Cài đặt và chế độ yên lặng. (xong)
 - **v0.5:** nhân vật là dữ liệu: đổi được giữa Mochi và các gói ảnh (như Hà Nhân), mỗi nhân vật có cỡ, tốc độ, hành vi, lời thoại riêng; chỉnh cỡ pet. Chưa có: nhiều pet chạy cùng lúc. (xong)
 - **v0.6:** nhắc việc tự đặt, chế độ có sẵn và tự tạo, tương tác với các mục trên màn hình nền (thả file, mở, nhận xét), lời thoại lâu hơn. (xong)
-- **v0.7 (bản này):** Hà Nhân đạp xe ba bánh, tay vẽ có ống tay áo thon và bàn tay 5 ngón (mắng người, cầm biển "BẬN"), nghịch ngợm trên cửa sổ đang làm việc, lịch ngủ (khoá màn hình, ngủ trưa, ngủ tối), mặt cười lộ răng.
+- **v0.7:** Hà Nhân đạp xe ba bánh, tay vẽ có ống tay áo thon và bàn tay 5 ngón (mắng người, cầm biển "BẬN"), nghịch ngợm trên cửa sổ đang làm việc, lịch ngủ (khoá màn hình, ngủ trưa, ngủ tối), mặt cười lộ răng. (xong)
+- **v0.8 (bản này):** Giao diện Dark Minimalist phong cách Catppuccin Mocha, Báo thức linh hoạt có ID & Báo lại (Snooze 5–10 phút), Hỗ trợ Múi giờ (`zoneinfo`), Triết lý không làm phiền (chống cướp focus tuyệt đối, icon `!` tinh tế, fade-in/fade-out), Đa nền tảng Windows (`ctypes`) & macOS, Đóng gói 1-file click-to-run nén UPX và CI/CD GitHub Actions.
 
 ## License
 

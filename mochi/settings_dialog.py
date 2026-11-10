@@ -5,6 +5,21 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFormLayout, QHBox
 
 from . import autostart, modes, monitor, sleep
 from .renderer import THEMES
+from .style import apply_theme
+
+COMMON_TIMEZONES = (
+    ("Hệ thống (Mặc định)", ""),
+    ("Asia/Ho_Chi_Minh", "Asia/Ho_Chi_Minh"),
+    ("UTC", "UTC"),
+    ("Asia/Tokyo", "Asia/Tokyo"),
+    ("Asia/Singapore", "Asia/Singapore"),
+    ("Asia/Bangkok", "Asia/Bangkok"),
+    ("Europe/London", "Europe/London"),
+    ("Europe/Paris", "Europe/Paris"),
+    ("America/New_York", "America/New_York"),
+    ("America/Los_Angeles", "America/Los_Angeles"),
+    ("Australia/Sydney", "Australia/Sydney"),
+)
 
 
 def _percent_slider(value, on_change, lo=30, hi=300):
@@ -21,7 +36,11 @@ class SettingsDialog(QDialog):
         super().__init__()
         self.pet, self.cfg = pet, pet.cfg
         self.setWindowTitle("Mochi: Cài đặt")
+        apply_theme(self)
         lay, form = QVBoxLayout(self), QFormLayout()
+        lay.setContentsMargins(16, 16, 16, 16)
+        lay.setSpacing(10)
+        form.setSpacing(8)
         lay.addLayout(form)
 
         self.mode = QComboBox(); self.fill_modes()
@@ -35,6 +54,14 @@ class SettingsDialog(QDialog):
         self.theme = QComboBox(); self.theme.addItems(list(THEMES)); self.theme.setCurrentText(pet.theme)
         self.theme.currentTextChanged.connect(pet.set_theme)
         self.theme_row = form.rowCount(); form.addRow("Màu (Mochi)", self.theme)
+
+        self.tz_box = QComboBox()
+        for label, val in COMMON_TIMEZONES:
+            self.tz_box.addItem(label, val)
+        self.tz_box.setCurrentIndex(max(0, self.tz_box.findData(getattr(self.cfg, "timezone", ""))))
+        self.tz_box.currentIndexChanged.connect(lambda _: self.set_timezone(self.tz_box.currentData()))
+        form.addRow("Múi giờ", self.tz_box)
+
         row, self.size = _percent_slider(self.cfg.scale, self.set_scale, 60, 200); form.addRow("Kích thước", row)
         row, self.speed = _percent_slider(self.cfg.speed, self.set_speed); form.addRow("Tốc độ đi", row)
         row, self.activity = _percent_slider(self.cfg.activity, self.set_activity); form.addRow("Tần suất hành vi", row)
@@ -86,6 +113,10 @@ class SettingsDialog(QDialog):
         setattr(self.cfg, key, qt.toString("HH:mm"))
         self.pet.apply_settings()
 
+    def set_timezone(self, tz):
+        self.cfg.timezone = tz
+        self.pet.apply_settings()
+
     def choose_mode(self, mid):
         self.pet.set_mode(mid)
         self.reload()                                             # its settings replace what the controls show
@@ -100,6 +131,9 @@ class SettingsDialog(QDialog):
         """show the current settings (a mode was switched, or saved, from the menu while this window was open)"""
         c = self.cfg
         self.fill_modes()
+        with QSignalBlocker(self.tz_box):
+            idx = max(0, self.tz_box.findData(getattr(c, "timezone", "")))
+            self.tz_box.setCurrentIndex(idx)
         for w, v in ((self.speed, round(c.speed * 100)), (self.activity, round(c.activity * 100)), (self.size, round(c.scale * 100)),
                      (self.focus, c.focus_min), (self.rest, c.break_min)):
             with QSignalBlocker(w): w.setValue(v)

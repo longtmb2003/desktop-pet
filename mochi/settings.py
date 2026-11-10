@@ -62,5 +62,6 @@ class Settings:
     night_to = _prop("night_to", "06:00")
     mischief = _prop("mischief", True)                     # get up to mischief on the window you are working in
     app_remarks = _prop("app_remarks", True)               # remark on the kind of program you are using (its class, never its title)
+    timezone = _prop("timezone", "")                       # e.g. "Asia/Ho_Chi_Minh", "" = system local time
     focus_min = _prop("focus_min", 25, 1, 180)          # Pomodoro focus length
     break_min = _prop("break_min", 5, 1, 60)            # Pomodoro break length

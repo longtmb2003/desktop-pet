@@ -38,3 +38,13 @@ def test_out_of_range_or_garbage_values_are_clamped_or_defaulted(tmp_path):
     s = Settings(_qs(tmp_path / "s.ini"))
     assert s.speed == 3.0 and s.focus_min == 1                                    # clamped
     assert s.activity == 1.0 and s.break_min == 5 and s.quiet is False            # unparsable: the default
+
+
+def test_timezone_setting(tmp_path):
+    s = Settings(_qs(tmp_path / "s.ini"))
+    assert s.timezone == ""
+    s.timezone = "Asia/Ho_Chi_Minh"
+    s.qs.sync()
+    t = Settings(_qs(tmp_path / "s.ini"))
+    assert t.timezone == "Asia/Ho_Chi_Minh"
+

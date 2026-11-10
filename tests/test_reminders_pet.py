@@ -155,3 +155,14 @@ def test_the_menu_and_settings_open_the_same_dialog(pet):
     assert pet.reminders_dialog is first and first.isVisible()
     pet.close()
     assert not first.isVisible()
+
+
+def test_pet_snooze_alert(pet):
+    r = rem.Reminder("Uống nước")
+    pet.remind(r)
+    assert pet.active_alert == r
+    pet.snooze_alert(minutes=5)
+    assert pet.active_alert is None
+    assert "Đã hoãn lại 5 phút" in pet.bubble.queue.items
+    assert len(pet.sched.snoozed) == 1
+

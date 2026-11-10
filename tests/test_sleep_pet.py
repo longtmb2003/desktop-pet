@@ -184,7 +184,10 @@ def test_the_watcher_really_hears_the_lock_signal_on_a_dbus_session(qapp):
     from PySide6.QtCore import QCoreApplication, QEventLoop, QTimer
     from PySide6.QtDBus import QDBusConnection, QDBusMessage
     cmd = ["dbus-daemon", "--session", "--fork", "--print-address", "--print-pid"]
-    proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    except subprocess.CalledProcessError:
+        pytest.skip("dbus-daemon cannot run in this environment")
     addr, pid = proc.stdout.split()[:2]
     try:
         listen, sender = (QDBusConnection.connectToBus(addr, name) for name in ("mochi-test-listen", "mochi-test-send"))

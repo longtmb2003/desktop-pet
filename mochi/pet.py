@@ -4,8 +4,8 @@ import random
 import time
 from datetime import datetime
 
-from PySide6.QtCore import QElapsedTimer, QFileSystemWatcher, QPoint, Qt, QTimer, QUrl
-from PySide6.QtGui import QCursor, QGuiApplication, QPainter, QTransform
+from PySide6.QtCore import QElapsedTimer, QFileSystemWatcher, QPoint, QRect, Qt, QTimer, QUrl
+from PySide6.QtGui import QColor, QCursor, QGuiApplication, QPainter, QTransform
 from PySide6.QtWidgets import QApplication, QMenu, QWidget
 
 from . import apps, autostart, desktop, modes, monitor, physics, sleep
@@ -21,6 +21,7 @@ from .settings_dialog import SettingsDialog
 from .sprite import paint_sprite, riding, sprite_mask, sprite_mask_key
 from .sound import chime
 from .state import SCOLDING, Action, Expression, Motion, State, after, ends_at
+from .style import apply_theme
 
 PUSH_CHANCE = 0.5                  # of the edge encounters that aren't a hop off, how many are a push against the "wall"
 CLICK_DELAY_MS = 250                # a click waits this long for a second click before it counts as a pet
@@ -31,8 +32,9 @@ MAX_DT = 0.05                       # cap one frame's time step so a stall can't
 class Pet(QWidget):
     def __init__(self, settings=None, pets=None):
         super().__init__()
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool | Qt.WindowDoesNotAcceptFocus)
         self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
         self.t = self.vy = self.squash = self.blink = 0.0
         self.facing, self.hearts = 1, []            # hearts: [x, y, life]
         self.drawn_facing, self.turn_from, self.turn_start = 1, 1.0, -1e9      # turning round takes a moment: see turn_scale()
@@ -51,11 +53,14 @@ class Pet(QWidget):
         self.setAcceptDrops(True)
         self.desk_items, self.desk_watch = None, QFileSystemWatcher(self)     # what is on the desktop, refreshed when the folder changes
         self.desk_watch.directoryChanged.connect(lambda _: setattr(self, "desk_items", None))
-        self.sched, self.rem_raw, self.pending, self.next_check = rem.Scheduler(rem.parse(self.cfg.reminders)), self.cfg.reminders, [], 0.0
+        self.last_touch = -1e9
+        self.now_hour = lambda: self.current_datetime().hour
+        self.now_time = lambda: self.current_datetime().time()
+        self.sched = rem.Scheduler(rem.parse(self.cfg.reminders), now=self.current_datetime)
+        self.rem_raw, self.pending, self.next_check = self.cfg.reminders, [], 0.0
+        self.active_alert = None
         self.pomo, self.hot, self.cpu, self.read_cpu = Pomodoro(), False, monitor.Hysteresis(), monitor.cpu_percent
         self.mon_timer = QTimer(self, interval=monitor.POLL_MS, timeout=self.poll_cpu)
-        self.last_touch, self.now_hour = -1e9, lambda: datetime.now().hour      # local time zone; tests replace now_hour
-        self.now_time = lambda: datetime.now().time()
         self.locked = self.suspended = False                                    # told by the PowerWatcher (power.py)
         self.active_id, self.active_class, self.active_since = "", "", 0.0        # the window the user is working in (reported by KWin)
         self.next_mischief, self.pending_mischief = 60.0, None                    # pending: (what to do, give up by) once it has jumped up
@@ -184,6 +189,20 @@ class Pet(QWidget):
         self.update_mask()
         self.update()
 
+    def get_tz(self):
+        tz_name = getattr(self.cfg, "timezone", "")
+        if tz_name:
+            try:
+                from zoneinfo import ZoneInfo
+                return ZoneInfo(tz_name)
+            except Exception:
+                pass
+        return None
+
+    def current_datetime(self):
+        tz = self.get_tz()
+        return datetime.now(tz) if tz else datetime.now()
+
     def hour(self):
         """local hour for time-of-day habits, or None when they don't apply: switched off, or the user is playing with the pet
         (it is never nudged to sleep while being handled)"""
@@ -192,6 +211,7 @@ class Pet(QWidget):
     def apply_settings(self):
         """a setting changed: bring the running pet in line (CPU watching, frame rate)"""
         self.sync_monitor()
+        self.sched.now = self.current_datetime
         if self.cfg.reminders != self.rem_raw:
             self.rem_raw = self.cfg.reminders; self.sched.replace(rem.parse(self.rem_raw))
         pd = self.pets.get(self.cfg.pet, self.defn)
@@ -441,9 +461,20 @@ class Pet(QWidget):
 
     def remind(self, r):
         """say one reminder: a bubble that jumps the queue, a little hop to get attention, a chime unless quiet or muted"""
+        self.active_alert = r
         self.say(f"Nhắc: {r.text}", urgent=True)
         if self.grounded and self.state.motion in (Motion.IDLE, Motion.WALK): self.vy = -320
         if self.cfg.sound and not self.quiet: chime()
+
+    def snooze_alert(self, minutes=5):
+        if getattr(self, "active_alert", None) is not None:
+            r = self.active_alert
+            self.sched.snooze(r, minutes)
+            self.say(f"Đã hoãn lại {minutes} phút", urgent=True)
+            self.active_alert = None
+
+    def dismiss_alert(self):
+        self.active_alert = None
 
     def open_reminders(self):
         if getattr(self, "reminders_dialog", None) is None: self.reminders_dialog = RemindersDialog(self)
@@ -611,6 +642,11 @@ class Pet(QWidget):
 
     def pet_it(self):
         if self.press is not None or self.state.motion is Motion.DRAG or self.state.action is Action.FLIP: return
+        if getattr(self, "active_alert", None) is not None:
+            r = self.active_alert
+            self.say(f"Nhắc: {r.text}", urgent=True)
+            self.active_alert = None
+            return
         self.enter(State(expression=Expression.HAPPY))
         self.vy = -420
         self.hearts += [[random.uniform(-30, 30), 11 - self.defn.height, 1.2 + random.random() * .5] for _ in range(4)]   # above its head
@@ -627,6 +663,13 @@ class Pet(QWidget):
 
     def build_menu(self):
         m = QMenu(self)
+        apply_theme(m)
+        if getattr(self, "active_alert", None) is not None:
+            snooze_menu = m.addMenu(f"Hoãn nhắc ({self.active_alert.text[:12]}...)")
+            snooze_menu.addAction("Báo lại 5 phút", lambda: self.snooze_alert(5))
+            snooze_menu.addAction("Báo lại 10 phút", lambda: self.snooze_alert(10))
+            snooze_menu.addAction("Đã hiểu / Bỏ qua", self.dismiss_alert)
+            m.addSeparator()
         colors = m.addMenu("Màu")
         for name in THEMES:
             a = colors.addAction(name)
@@ -696,3 +739,13 @@ class Pet(QWidget):
         p.setRenderHint(QPainter.Antialiasing)
         if self.scale != 1: p.scale(self.scale, self.scale)
         (paint_sprite if self.defn.kind == "sprite" else paint)(self, p)
+        if getattr(self, "active_alert", None) is not None and not self.bubble.isVisible():
+            p.save()
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor(243, 139, 168))
+            bx, by = int(self.size // 2 - 8), max(2, int(self.ceiling - 18))
+            p.drawEllipse(bx, by, 16, 16)
+            p.setPen(QColor(30, 30, 46))
+            font = p.font(); font.setBold(True); font.setPixelSize(11); p.setFont(font)
+            p.drawText(QRect(bx, by, 16, 16), Qt.AlignCenter, "!")
+            p.restore()

@@ -1,0 +1,207 @@
+name: Release Build & Packaging
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build Windows (mochi.exe)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies & UPX
+        run: |
+          python -m pip install --upgrade pip
+          pip install "PySide6-Essentials>=6.6" "psutil>=5.9" "pyinstaller>=6.6"
+          choco install upx
+
+      - name: Build onefile executable with PyInstaller
+        shell: bash
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed --name mochi \
+            --paths . \
+            --add-data "mochi/platform/kwin.js;mochi/platform" \
+            $( [ -d mochi/pets/packs ] && echo '--add-data "mochi/pets/packs;mochi/pets/packs"' ) \
+            --upx-exclude=vcruntime140.dll \
+            --upx-exclude=msvcp140.dll \
+            --upx-exclude=qwindows.dll \
+            --exclude-module tkinter \
+            --exclude-module matplotlib \
+            --exclude-module numpy \
+            --exclude-module scipy \
+            --exclude-module unittest \
+            --exclude-module test \
+            --exclude-module PySide6.QtWebEngineCore \
+            --exclude-module PySide6.QtWebEngineWidgets \
+            --exclude-module PySide6.QtQml \
+            --exclude-module PySide6.QtQuick \
+            --exclude-module PySide6.QtQuickWidgets \
+            --exclude-module PySide6.QtSql \
+            --exclude-module PySide6.QtNetwork \
+            --exclude-module PySide6.QtMultimedia \
+            --exclude-module PySide6.QtPdf \
+            packaging/entry.py
+
+      - name: Upload Windows Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mochi-windows
+          path: dist/mochi.exe
+
+  build-macos:
+    name: Build macOS (mochi.dmg)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install "PySide6-Essentials>=6.6" "psutil>=5.9" "pyinstaller>=6.6" pyobjc-framework-Quartz pyobjc-framework-Cocoa
+          brew install create-dmg || true
+
+      - name: Build macOS app bundle with PyInstaller
+        run: |
+          pyinstaller --noconfirm --clean --windowed --name Mochi \
+            --paths . \
+            --add-data "mochi/platform/kwin.js:mochi/platform" \
+            $( [ -d mochi/pets/packs ] && echo '--add-data "mochi/pets/packs:mochi/pets/packs"' ) \
+            --icon packaging/mochi.png \
+            --exclude-module tkinter \
+            --exclude-module matplotlib \
+            --exclude-module numpy \
+            --exclude-module scipy \
+            --exclude-module PySide6.QtWebEngineCore \
+            --exclude-module PySide6.QtWebEngineWidgets \
+            --exclude-module PySide6.QtQml \
+            --exclude-module PySide6.QtQuick \
+            --exclude-module PySide6.QtSql \
+            --exclude-module PySide6.QtNetwork \
+            --exclude-module PySide6.QtMultimedia \
+            --exclude-module PySide6.QtPdf \
+            packaging/entry.py
+
+      - name: Package DMG
+        run: |
+          mkdir -p dist/dmg
+          cp -r dist/Mochi.app dist/dmg/
+          if command -v create-dmg >/dev/null 2>&1; then
+            create-dmg \
+              --volname "Mochi Desktop Pet" \
+              --window-pos 200 120 \
+              --window-size 600 400 \
+              --icon-size 100 \
+              --app-drop-link 425 200 \
+              "dist/mochi.dmg" \
+              "dist/dmg/" || hdiutil create -volname "Mochi" -srcfolder dist/dmg -ov -format UDZO dist/mochi.dmg
+          else
+            hdiutil create -volname "Mochi" -srcfolder dist/dmg -ov -format UDZO dist/mochi.dmg
+          fi
+
+      - name: Upload macOS Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mochi-macos
+          path: dist/mochi.dmg
+
+  build-linux:
+    name: Build Linux (mochi.AppImage & binary)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies & UPX
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y upx libgl1-mesa-glx libegl1-mesa
+          python -m pip install --upgrade pip
+          pip install "PySide6-Essentials>=6.6" "psutil>=5.9" "pyinstaller>=6.6"
+
+      - name: Build onefile executable
+        run: |
+          scripts/build.sh --onefile
+          cp dist/mochi dist/mochi-linux-x86_64
+
+      - name: Build AppImage
+        run: |
+          mkdir -p AppDir/usr/bin AppDir/usr/share/icons/hicolor/256x256/apps AppDir/usr/share/applications
+          cp dist/mochi AppDir/usr/bin/mochi
+          cp packaging/mochi.png AppDir/mochi.png
+          cp packaging/mochi.png AppDir/usr/share/icons/hicolor/256x256/apps/mochi.png
+          sed "s|@BIN@|mochi|" packaging/mochi.desktop > AppDir/mochi.desktop
+          cp AppDir/mochi.desktop AppDir/usr/share/applications/mochi.desktop
+          
+          # Create AppRun script
+          cat << 'EOF' > AppDir/AppRun
+          #!/bin/sh
+          HERE="$(dirname "$(readlink -f "${0}")")"
+          export PATH="${HERE}/usr/bin:${PATH}"
+          exec "${HERE}/usr/bin/mochi" "$@"
+          EOF
+          chmod +x AppDir/AppRun
+
+          # Download and run appimagetool
+          wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O appimagetool
+          chmod +x appimagetool
+          ./appimagetool --appimage-extract-and-run AppDir dist/mochi.AppImage || true
+
+      - name: Upload Linux Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mochi-linux
+          path: |
+            dist/mochi-linux-x86_64
+            dist/mochi.AppImage
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Flatten release assets
+        run: |
+          mkdir -p assets
+          find release-assets/ -type f -exec cp {} assets/ \;
+          ls -la assets/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: assets/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
