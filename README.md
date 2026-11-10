@@ -55,12 +55,38 @@
 
 Chưa kiểm tra: fractional scaling và nhiều màn hình có scale khác nhau. Qt/XWayland xử lý toạ độ ở các trường hợp này khác nhau, nên pet có thể lệch vị trí so với cửa sổ.
 
-## Cài đặt & Phân phối
+## Cài đặt & Chạy nhanh (1 dòng lệnh cho từng OS)
 
-Bạn có thể tải trực tiếp các bản đóng gói 1-file click-to-run phát hành tự động qua GitHub Actions từ mục [Releases](https://github.com/longtmb2003/desktop-pet/releases):
-- `mochi.exe`: Dành cho Windows (tải về nhấp đúp chạy ngay)
-- `mochi.dmg`: Dành cho macOS (kéo thả vào thư mục Applications)
-- `mochi.AppImage` & `mochi-linux-x86_64`: Dành cho Linux (cấp quyền thực thi và chạy)
+### 🪟 Windows (PowerShell)
+Tải, tạo lối tắt khởi động cùng Windows và chạy ngay:
+```powershell
+irm https://raw.githubusercontent.com/longtmb2003/desktop-pet/main/scripts/install.ps1 | iex
+```
+*Hoặc chỉ tải về và chạy file `.exe`:*
+```powershell
+Invoke-WebRequest -Uri "https://github.com/longtmb2003/desktop-pet/releases/latest/download/mochi.exe" -OutFile "$env:TEMP\mochi.exe"; Start-Process "$env:TEMP\mochi.exe"
+```
+
+### 🍎 macOS (Terminal)
+Tải, cài đặt vào `/Applications` và mở app:
+```bash
+curl -fsSL https://raw.githubusercontent.com/longtmb2003/desktop-pet/main/scripts/install-mac.sh | bash
+```
+
+### 🐧 Linux (Terminal)
+Tải `mochi.AppImage` vào `~/.local/bin` và chạy ngay:
+```bash
+curl -fsSL https://raw.githubusercontent.com/longtmb2003/desktop-pet/main/scripts/install-linux.sh | bash
+```
+
+---
+
+## Tải thủ công từ Releases hoặc Tự build
+
+Bạn có thể tải trực tiếp file đóng gói từ mục [Releases](https://github.com/longtmb2003/desktop-pet/releases):
+- `mochi.exe`: Windows (click chạy luôn)
+- `mochi.dmg`: macOS (kéo vào Applications)
+- `mochi.AppImage`: Linux (cấp quyền `chmod +x` và chạy)
 
 Hoặc tự build từ mã nguồn:
 
