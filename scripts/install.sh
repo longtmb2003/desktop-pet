@@ -3,10 +3,21 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# Check if already built, if not, build it automatically
+# Check if already built, or if source files are newer than built binary
+REBUILD=0
 if [ ! -f dist/mochi ] && [ ! -x dist/mochi/mochi ]; then
     echo "dist/mochi not found. Running scripts/build.sh..."
-    scripts/build.sh
+    REBUILD=1
+elif [ -f dist/mochi ]; then
+    NEWEST_SRC=$(find mochi packaging -type f -name "*.py" -newer dist/mochi 2>/dev/null | head -n 1 || true)
+    if [ -n "$NEWEST_SRC" ]; then
+        echo ">>> Mã nguồn mới hơn dist/mochi ($NEWEST_SRC). Đang tự động build lại..."
+        REBUILD=1
+    fi
+fi
+
+if [ "$REBUILD" -eq 1 ]; then
+    scripts/build.sh --onefile
 fi
 
 # Check for Qt6 xcb runtime dependency on Linux (libxcb-cursor0)
