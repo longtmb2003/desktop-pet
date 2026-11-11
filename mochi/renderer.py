@@ -16,6 +16,22 @@ THEMES = {  # body gradient top/bottom, ear, tail, inner ear, eye
 }
 
 
+class _ThemeColors:
+    __slots__ = ("dark", "tail", "ear", "pink", "brush", "pink_darker_130", "pink_darker_150")
+
+    def __init__(self, top, bottom, ear, tail, inner, eye):
+        self.dark = QColor(eye)
+        self.tail = QColor(tail)
+        self.ear = QColor(ear)
+        self.pink = QColor(inner)
+        self.pink_darker_130 = self.pink.darker(130)
+        self.pink_darker_150 = self.pink.darker(150)
+        g = QLinearGradient(0, -80, 0, -4)
+        g.setColorAt(0, QColor(top))
+        g.setColorAt(1, QColor(bottom))
+        self.brush = QBrush(g)
+
+
 def heart(s):
     p = QPainterPath(); p.moveTo(0, s * .9)
     p.cubicTo(-s * 1.6, -s * .2, -s * .6, -s * 1.3, 0, -s * .4)
@@ -30,6 +46,15 @@ def star(r):
         p.lineTo(rr * math.cos(a), rr * math.sin(a)) if i else p.moveTo(rr * math.cos(a), rr * math.sin(a))
     p.closeSubpath()
     return p
+
+
+_THEME_CACHE = {k: _ThemeColors(**v) for k, v in THEMES.items()}
+_SHADOW_COLOR = QColor(0, 0, 0, 38)
+_CHEEK_COLOR = QColor(255, 157, 176, 120)
+_STAR_COLOR = QColor("#ffcf5a")
+_SWEAT_COLOR = QColor(110, 185, 255)
+_STAR_PATH_5 = star(5)
+_UNIT_HEART_PATH = heart(1.0)
 
 
 def silhouette(f, sleep, stretch, hearts, flip=False, lively=False):
@@ -59,10 +84,10 @@ def paint(pet, p):
     tired = (pet.hot or state.expression is Expression.TIRED) and not (dizzy or scared or happy or sleep or drag)
     walking = motion is Motion.WALK and act is Action.NONE          # a chase runs, it doesn't use the walk cycle
     up = motion in (Motion.AIRBORNE, Motion.DRAG) or act is Action.DANGLE
-    th = THEMES[pet.theme]
-    DARK, TAIL, EAR, PINK = (QColor(th[k]) for k in ("eye", "tail", "ear", "inner"))
+    tc = _THEME_CACHE.get(pet.theme) or _THEME_CACHE["Kem"]
+    DARK, TAIL, EAR, PINK = tc.dark, tc.tail, tc.ear, tc.pink
     if pet.grounded:                                                          # shadow only when standing
-        p.setPen(Qt.NoPen); p.setBrush(QColor(0, 0, 0, 38)); p.drawEllipse(QPointF(0, 1), 46, 6)
+        p.setPen(Qt.NoPen); p.setBrush(_SHADOW_COLOR); p.drawEllipse(QPointF(0, 1), 46, 6)
 
     hop, sy = 0.0, 1 + 0.025 * math.sin(t * 2.4)
     if walking: hop = abs(math.sin(t * 9)) * 7
@@ -115,12 +140,10 @@ def paint(pet, p):
         else:  blob(TAIL, m * 20, -5 - (max(0, math.sin(t * 9 + i * math.pi)) * 5 if walking else 0), 13, 8)
 
     # body
-    g = QLinearGradient(0, -80, 0, -4)
-    g.setColorAt(0, QColor(th["top"])); g.setColorAt(1, QColor(th["bottom"]))
-    p.setPen(Qt.NoPen); p.setBrush(QBrush(g)); p.drawEllipse(QRectF(-47, -80, 94, 76))
+    p.setPen(Qt.NoPen); p.setBrush(tc.brush); p.drawEllipse(QRectF(-47, -80, 94, 76))
 
     # face
-    for m in (-1, 1): blob(QColor(255, 157, 176, 120), m * 31, -37, 8, 4.5)
+    for m in (-1, 1): blob(_CHEEK_COLOR, m * 31, -37, 8, 4.5)
     cur = QCursor.pos() - pet.pos()                                              # eyes follow the cursor (window pixels -> drawing pixels)
     cx, cy = cur.x() / pet.scale - S // 2, cur.y() / pet.scale - (FEET - 46)
     lx, ly = max(-1, min(1, cx / 250)) * -2.5 * pet.facing, max(-1, min(1, cy / 250)) * 1.5
@@ -144,12 +167,12 @@ def paint(pet, p):
             blob(Qt.white, x + lx * 1.6 - 2.5, -49 + ly, 3, 3); blob(Qt.white, x + lx + 3, -42 + ly, 1.5, 1.5)
             continue
         p.setPen(pen); p.setBrush(Qt.NoBrush); p.drawPath(arc)
-    if scared: blob(PINK.darker(150), 0, -32, 4.5, 6.5)
+    if scared: blob(tc.pink_darker_150, 0, -32, 4.5, 6.5)
     elif drag: blob(DARK, 0, -35, 3, 4)
-    elif happy: blob(PINK.darker(130), 0, -35, 4, 4.5)
-    elif dizzy: blob(PINK.darker(150), 0, -34, 3.5, 3)
-    elif act is Action.PUSH: blob(PINK.darker(150), 0, -34, 5, 2.5)
-    elif act is Action.YAWN: blob(PINK.darker(150), 0, -33, 4 + 3 * o, 2 + 8 * o)
+    elif happy: blob(tc.pink_darker_130, 0, -35, 4, 4.5)
+    elif dizzy: blob(tc.pink_darker_150, 0, -34, 3.5, 3)
+    elif act is Action.PUSH: blob(tc.pink_darker_150, 0, -34, 5, 2.5)
+    elif act is Action.YAWN: blob(tc.pink_darker_150, 0, -33, 4 + 3 * o, 2 + 8 * o)
     else:
         mouth = QPainterPath(); mouth.moveTo(-5, -38); mouth.quadTo(-2.5, -33, 0, -38); mouth.quadTo(2.5, -33, 5, -38)
         p.setPen(QPen(DARK, 2, Qt.SolidLine, Qt.RoundCap)); p.setBrush(Qt.NoBrush); p.drawPath(mouth)
@@ -175,10 +198,10 @@ def paint(pet, p):
             p.setPen(QColor(122, 134, 201, int(math.sin(ph * math.pi) * 230)))
             p.drawText(QPointF(34 + ph * 22, -84 - ph * 30), "z")
     if dizzy:                                                          # stars circling the head
-        p.setPen(Qt.NoPen); p.setBrush(QColor("#ffcf5a"))
+        p.setPen(Qt.NoPen); p.setBrush(_STAR_COLOR)
         for i in range(3):
             a = t * 5 + i * 2.094
-            p.save(); p.translate(34 * math.cos(a), -104 + 9 * math.sin(a)); p.rotate(t * 90); p.drawPath(star(5)); p.restore()
+            p.save(); p.translate(34 * math.cos(a), -104 + 9 * math.sin(a)); p.rotate(t * 90); p.drawPath(_STAR_PATH_5); p.restore()
     if tired:                                                          # two sweat drops sliding down the forehead
         for i, sx in enumerate((-38, 40)):
             ph = (t * 0.7 + i * 0.5) % 1
@@ -190,4 +213,5 @@ def paint(pet, p):
         p.drawEllipse(QPointF(46 + ph * 8, -92 + ph * 26), 3, 4.5)
     for x, y, life in pet.hearts:
         p.setPen(Qt.NoPen); p.setBrush(QColor(255, 111, 145, int(min(1, life) * 230)))
-        p.save(); p.translate(x, y); p.drawPath(heart(5 + 3 * math.sin(life * 6))); p.restore()
+        hs = 5 + 3 * math.sin(life * 6)
+        p.save(); p.translate(x, y); p.scale(hs, hs); p.drawPath(_UNIT_HEART_PATH); p.restore()

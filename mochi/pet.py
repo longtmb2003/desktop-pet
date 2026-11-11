@@ -42,6 +42,7 @@ class Pet(QWidget):
         self.wins, self.support, self.vx, self.grounded = {}, None, 0.0, False   # wins: id -> (x, y, w, h); support: id we stand on
         self.next_blink, self.moved, self.press, self.mask_key = 2.0, False, None, None
         self.paused, self.drag, self.shaken = False, DragTracker(), False
+        self.hidden_to_tray = False
         self.cfg = settings or Settings()
         self.theme = self.cfg.theme
         self.pets = pets if pets is not None else available()          # id -> PetDef
@@ -146,6 +147,11 @@ class Pet(QWidget):
     def tick(self):
         dt = min(self.clock.restart() / 1000, MAX_DT)
         self.t += dt
+        if getattr(self, "hidden_to_tray", False):
+            if self.pomo.active: self.pomodoro_event(self.pomo.poll())
+            if self.t >= self.next_check: self.next_check = self.t + 1.0; self.check_reminders(); self.check_sleep()
+            self.retune()
+            return
         if self.facing != self.drawn_facing:                          # it changed direction: turn round (standing still) before going on
             self.turn_from = self.toward(self.drawn_facing) if self.defn.turn_s else float(self.facing)
             self.drawn_facing, self.turn_start = self.facing, self.t
@@ -515,6 +521,9 @@ class Pet(QWidget):
     def retune(self):
         """frame rate: full speed by default, 20 fps while asleep, or resting when quiet or the CPU is busy; never while it moves
         under physics (airborne, dragged, mid-action), where bigger steps would show"""
+        if getattr(self, "hidden_to_tray", False):
+            if self.timer.interval() != 1000: self.timer.setInterval(1000)
+            return
         resting = self.grounded and self.state.motion in (Motion.IDLE, Motion.WALK) and self.state.action is Action.NONE
         ms = LOW_FPS_MS if self.state.motion is Motion.SLEEP or resting and (self.hot or self.quiet) else 33
         if self.timer.interval() != ms: self.timer.setInterval(ms)
@@ -727,10 +736,12 @@ class Pet(QWidget):
 
     def bring_back(self):
         """drop the pet in from the top of the primary screen (e.g. it got lost off-screen)"""
+        self.hidden_to_tray = False
         if not self.isVisible(): self.show()
         g = QGuiApplication.primaryScreen().availableGeometry()
         self.px, self.py, self.vy, self.vx, self.support = g.center().x() - self.size / 2, g.top() - 100 * self.scale, 0.0, 0.0, None
         self.enter(State(Motion.AIRBORNE))
+        self.retune()
 
     def on_tray_activated(self, reason):
         if reason == QSystemTrayIcon.Trigger:
@@ -740,12 +751,17 @@ class Pet(QWidget):
 
     def toggle_visibility(self):
         if self.isVisible():
+            self.hidden_to_tray = True
             self.hide()
+            self.retune()
             if getattr(self, "tray", None) and self.tray.isVisible():
                 self.tray.showMessage("Mochi", "Mochi đang chạy ngầm trong khay hệ thống. Click icon để hiện lại!", QSystemTrayIcon.Information, 2500)
         else:
+            self.hidden_to_tray = False
             self.show()
+            self.clock.restart()
             self.bring_back()
+            self.retune()
 
     def set_paused(self, on):
         """freeze the pet in place (timer stopped, so no CPU) or let it carry on"""

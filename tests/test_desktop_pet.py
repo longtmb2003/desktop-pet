@@ -27,7 +27,7 @@ def test_the_pet_accepts_drops_of_files_and_only_files(pet):
     assert pet.acceptDrops()
     from PySide6.QtGui import QDragEnterEvent
     def enter(mime):
-        e = QDragEnterEvent(pet.rect().center(), Qt.CopyAction, mime, Qt.LeftButton, Qt.NoModifier)
+        e = QDragEnterEvent(QPointF(pet.rect().center()), Qt.CopyAction, mime, Qt.LeftButton, Qt.NoModifier)
         pet.dragEnterEvent(e)
         return e.isAccepted()
     files, text = QMimeData(), QMimeData()
