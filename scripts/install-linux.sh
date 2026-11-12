@@ -5,12 +5,13 @@ set -euo pipefail
 
 APP_DIR="$HOME/.local/bin"
 BIN="$APP_DIR/mochi"
-URL="https://github.com/longtmb2003/desktop-pet/releases/latest/download/mochi.AppImage"
+URL="https://github.com/longtmb2003/desktop-pet/releases/latest/download/mochi-linux-x86_64"
+FALLBACK_URL="https://github.com/longtmb2003/desktop-pet/releases/latest/download/mochi.AppImage"
 
 echo ">>> Đang tải Mochi cho Linux từ GitHub Releases..."
 mkdir -p "$APP_DIR"
 
-if ! curl -fL -o "$BIN" "$URL" 2>/dev/null; then
+if ! curl -fL -o "$BIN" "$URL" 2>/dev/null && ! curl -fL -o "$BIN" "$FALLBACK_URL" 2>/dev/null; then
     echo ">>> [!] Chưa tìm thấy file release trên GitHub Releases."
     echo ">>>     (Nếu bạn vừa push tag, GitHub Actions đang chạy build tự động trên đám mây, mất khoảng 2-4 phút)."
     echo ">>>     Xem tiến trình build tại: https://github.com/longtmb2003/desktop-pet/actions"
@@ -59,6 +60,24 @@ if ! "$BIN" --version >/dev/null 2>&1; then
     echo ">>>   cd desktop-pet && ./scripts/install.sh --autostart" >&2
     exit 1
 fi
+
+DATA="${XDG_DATA_HOME:-$HOME/.local/share}"
+mkdir -p "$DATA/applications" "$DATA/icons/hicolor/256x256/apps"
+ICON="$DATA/icons/hicolor/256x256/apps/mochi.png"
+if [ ! -f "$ICON" ]; then
+    curl -fsSL "https://raw.githubusercontent.com/longtmb2003/desktop-pet/main/packaging/mochi.png" -o "$ICON" 2>/dev/null || true
+fi
+cat << 'EOF' > "$DATA/applications/mochi.desktop"
+[Desktop Entry]
+Type=Application
+Name=Mochi
+Comment=A tiny vector desktop pet
+Exec=mochi
+Icon=mochi
+Terminal=false
+Categories=Utility;Amusement;
+EOF
+command -v update-desktop-database >/dev/null && update-desktop-database "$DATA/applications" 2>/dev/null || true
 
 echo ">>> Đã cài đặt thành công tại: $BIN"
 echo ">>> Đang khởi chạy Mochi ngầm trong tiến trình (daemon)..."
