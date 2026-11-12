@@ -6,6 +6,7 @@ $Bin = "$InstallDir\mochi.exe"
 $Url = "https://github.com/longtmb2003/desktop-pet/releases/latest/download/mochi.exe"
 
 Write-Host ">>> Đang tải Mochi cho Windows từ GitHub Releases..." -ForegroundColor Cyan
+Stop-Process -Name "mochi" -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 
 try {

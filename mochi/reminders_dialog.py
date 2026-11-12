@@ -15,6 +15,7 @@ class RemindersDialog(QDialog):
         self.pet, self.items = pet, rem.parse(pet.cfg.reminders)
         self.setWindowTitle("Mochi: Nhắc việc")
         self.setAttribute(Qt.WA_QuitOnClose, False)
+        self.setAttribute(Qt.WA_DeleteOnClose, True)
         apply_theme(self)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(16, 16, 16, 16)
@@ -115,3 +116,10 @@ class RemindersDialog(QDialog):
     def on_test(self):
         r = self.from_form()
         if r is not None: self.pet.remind(r)
+
+    def closeEvent(self, event):
+        super().closeEvent(event)
+        if getattr(self, "pet", None):
+            self.pet.reminders_dialog = None
+        import gc
+        gc.collect()

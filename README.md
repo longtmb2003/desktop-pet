@@ -94,6 +94,28 @@ curl -fsSL https://raw.githubusercontent.com/longtmb2003/desktop-pet/main/script
 
 ---
 
+## 🔄 Cách cập nhật phiên bản mới (Update)
+
+Mochi lưu giữ toàn bộ dữ liệu cài đặt, màu sắc và lịch nhắc việc ở vị trí cấu hình hệ thống riêng biệt, do đó **cập nhật sẽ KHÔNG làm mất dữ liệu hoặc cài đặt của bạn**.
+
+Để cập nhật lên bản mới nhất, người dùng chỉ cần chạy lại lệnh cài đặt 1 dòng (script sẽ tự động tắt tiến trình cũ, tải file mới đè lên và khởi chạy lại Mochi ngay):
+
+* **🪟 Windows (PowerShell):**
+  ```powershell
+  irm https://raw.githubusercontent.com/longtmb2003/desktop-pet/main/scripts/install.ps1 | iex
+  ```
+* **🍎 macOS (Terminal):**
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/longtmb2003/desktop-pet/main/scripts/install-mac.sh | bash
+  ```
+* **🐧 Linux (Terminal):**
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/longtmb2003/desktop-pet/main/scripts/install-linux.sh | bash
+  ```
+*(Hoặc vào mục [GitHub Releases](https://github.com/longtmb2003/desktop-pet/releases) tải file `mochi.exe` / `mochi.dmg` / `mochi` mới nhất về thay thế file cũ).*
+
+---
+
 ## 🗑️ Cách gỡ cài đặt (Xóa)
 
 Nếu không còn nhu cầu sử dụng, bạn có thể gỡ bỏ hoàn toàn Mochi rất nhanh:

@@ -37,6 +37,7 @@ class SettingsDialog(QDialog):
         self.pet, self.cfg = pet, pet.cfg
         self.setWindowTitle("Mochi: Cài đặt")
         self.setAttribute(Qt.WA_QuitOnClose, False)
+        self.setAttribute(Qt.WA_DeleteOnClose, True)
         apply_theme(self)
         lay, form = QVBoxLayout(self), QFormLayout()
         lay.setContentsMargins(16, 16, 16, 16)
@@ -173,3 +174,10 @@ class SettingsDialog(QDialog):
     def set_flag(self, key, on):
         setattr(self.cfg, key, on)
         self.pet.apply_settings()
+
+    def closeEvent(self, event):
+        super().closeEvent(event)
+        if getattr(self, "pet", None):
+            self.pet.dialog = None
+        import gc
+        gc.collect()

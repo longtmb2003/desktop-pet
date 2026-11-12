@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
-# Build an optimized onefile (or onedir) Mochi executable with PyInstaller.
-# Strips unnecessary Qt bloat and applies UPX compression when available.
-# Usage: scripts/build.sh [--onefile|--onedir]
+# Build an optimized onefile (or onedir) Mochi executable with PyInstaller or Nuitka.
+# Strips unnecessary Qt bloat and applies UPX/native optimizations when available.
+# Usage: scripts/build.sh [--onefile|--onedir] [--nuitka|--pyinstaller]
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+BUILDER="pyinstaller"
 MODE="--onefile"
 for arg in "$@"; do
-    if [ "$arg" = "--onedir" ]; then
+    if [ "$arg" = "--nuitka" ]; then
+        BUILDER="nuitka"
+    elif [ "$arg" = "--pyinstaller" ]; then
+        BUILDER="pyinstaller"
+    elif [ "$arg" = "--onedir" ]; then
         MODE="--onedir"
     elif [ "$arg" = "--onefile" ]; then
         MODE="--onefile"
@@ -23,7 +28,48 @@ fi
 PYTHON="python3"
 if [ -x "$VENV/bin/python" ]; then
     PYTHON="$VENV/bin/python"
-    "$PYTHON" -m pip install -q "PySide6-Essentials>=6.6" "psutil>=5.9" "pyinstaller>=6.6" || true
+    if [ "$BUILDER" = "nuitka" ]; then
+        "$PYTHON" -m pip install -q "PySide6-Essentials>=6.6" "psutil>=5.9" "nuitka>=2.0" "zstandard" || true
+    else
+        "$PYTHON" -m pip install -q "PySide6-Essentials>=6.6" "psutil>=5.9" "pyinstaller>=6.6" || true
+    fi
+fi
+
+if [ "$BUILDER" = "nuitka" ]; then
+    echo "Building Mochi with Nuitka native compiler ($MODE)..."
+    NUITKA_ARGS=(
+        --standalone
+        --enable-plugin=pyside6
+        --include-data-files=mochi/platform/kwin.js=mochi/platform/kwin.js
+        --nofollow-import-to=tkinter,matplotlib,numpy,scipy,unittest,test
+        --assume-yes-for-downloads
+        --remove-output
+        --output-dir=dist
+    )
+    if [ "$MODE" = "--onefile" ]; then
+        NUITKA_ARGS+=(--onefile --output-filename=mochi)
+    else
+        NUITKA_ARGS+=(--output-filename=mochi)
+    fi
+    if [[ "${OSTYPE:-}" == "msys"* || "${OSTYPE:-}" == "win32"* || "${OSTYPE:-}" == "cygwin"* ]]; then
+        NUITKA_ARGS+=(--windows-disable-console)
+    fi
+    mkdir -p dist
+    if "$PYTHON" -m nuitka "${NUITKA_ARGS[@]}" packaging/entry.py; then
+        if [ "$MODE" = "--onefile" ]; then
+            OUT="dist/mochi"
+            [ -f "dist/mochi.exe" ] && OUT="dist/mochi.exe"
+            [ -f "dist/mochi.bin" ] && OUT="dist/mochi.bin"
+            echo "Successfully built Nuitka native executable: $OUT ($(du -sh "$OUT" | cut -f1))"
+        else
+            echo "Successfully built directory: dist/mochi/ ($(du -sh dist/mochi | cut -f1))"
+        fi
+        exit 0
+    else
+        echo ">>> [!] Nuitka build encountered an issue. Falling back to PyInstaller..."
+        "$PYTHON" -m pip install -q "pyinstaller>=6.6" || true
+        BUILDER="pyinstaller"
+    fi
 fi
 
 UPX_FLAGS=()

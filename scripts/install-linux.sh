@@ -9,6 +9,7 @@ URL="https://github.com/longtmb2003/desktop-pet/releases/latest/download/mochi-l
 FALLBACK_URL="https://github.com/longtmb2003/desktop-pet/releases/latest/download/mochi.AppImage"
 
 echo ">>> Đang tải Mochi cho Linux từ GitHub Releases..."
+pkill -x mochi 2>/dev/null || true
 mkdir -p "$APP_DIR"
 
 if ! curl -fL -o "$BIN" "$URL" 2>/dev/null && ! curl -fL -o "$BIN" "$FALLBACK_URL" 2>/dev/null; then
@@ -28,16 +29,30 @@ if ! curl -fL -o "$BIN" "$URL" 2>/dev/null && ! curl -fL -o "$BIN" "$FALLBACK_UR
     exit 1
 fi
 
-# Check for Qt6 xcb runtime dependency on Linux (libxcb-cursor0)
-if ! (ldconfig -p 2>/dev/null || /sbin/ldconfig -p 2>/dev/null) | grep -q "libxcb-cursor.so.0"; then
-    if [ ! -f /usr/lib/x86_64-linux-gnu/libxcb-cursor.so.0 ] && [ ! -f /usr/lib64/libxcb-cursor.so.0 ] && [ ! -f /usr/lib/libxcb-cursor.so.0 ]; then
-        if command -v apt-get >/dev/null 2>&1; then
-            echo ">>> [!] Đang cài đặt thư viện cần thiết 'libxcb-cursor0'..."
-            sudo apt-get install -y libxcb-cursor0 2>/dev/null || {
-                sudo apt-get update -qq -o Acquire::AllowInsecureRepositories=true 2>/dev/null || true
-                sudo apt-get install -y libxcb-cursor0 || true
-            }
+# Check for Qt6 xcb runtime dependency on Linux (libxcb-cursor0, libxkbcommon-x11-0)
+check_xcb() {
+    (ldconfig -p 2>/dev/null || /sbin/ldconfig -p 2>/dev/null) | grep -q "libxcb-cursor.so.0" || \
+    [ -f /usr/lib/x86_64-linux-gnu/libxcb-cursor.so.0 ] || \
+    [ -f /usr/lib64/libxcb-cursor.so.0 ] || \
+    [ -f /usr/lib/libxcb-cursor.so.0 ] || \
+    [ -f /usr/lib/aarch64-linux-gnu/libxcb-cursor.so.0 ]
+}
+
+if ! check_xcb; then
+    if command -v apt-get >/dev/null 2>&1; then
+        echo ">>> [!] Đang cài đặt thư viện cần thiết 'libxcb-cursor0' (bắt buộc cho Qt6)..."
+        if [ -c /dev/tty ]; then
+            sudo </dev/tty apt-get update -qq 2>/dev/null || true
+            sudo </dev/tty apt-get install -y libxcb-cursor0 libxkbcommon-x11-0 2>/dev/null || true
+        else
+            sudo apt-get update -qq 2>/dev/null || true
+            sudo apt-get install -y libxcb-cursor0 libxkbcommon-x11-0 2>/dev/null || true
         fi
+    fi
+    if ! check_xcb; then
+        echo ">>> [!] CẢNH BÁO: Chưa cài đặt được thư viện 'libxcb-cursor0'." >&2
+        echo ">>>     Nếu Mochi không hiển thị, vui lòng chạy lệnh sau trên terminal:" >&2
+        echo ">>>       sudo apt update && sudo apt install -y libxcb-cursor0 libxkbcommon-x11-0" >&2
     fi
 fi
 
