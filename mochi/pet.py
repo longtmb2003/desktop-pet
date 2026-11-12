@@ -256,10 +256,16 @@ class Pet(QWidget):
     def on_lock(self, locked):
         self.locked = locked
         self.check_sleep()
+        if locked:
+            import gc
+            gc.collect()
 
     def on_suspend(self, going_to_sleep):
         self.suspended = going_to_sleep
         self.check_sleep()
+        if going_to_sleep:
+            import gc
+            gc.collect()
 
     def check_sleep(self):
         """put it to sleep when it should be, and wake it (yawn, greeting) when the reason has passed. Sleep it chose itself only:
@@ -754,6 +760,17 @@ class Pet(QWidget):
             self.hidden_to_tray = True
             self.hide()
             self.retune()
+            # Clean up open dialogs and release memory when tucked into tray
+            for name in ("dialog", "reminders_dialog"):
+                w = getattr(self, name, None)
+                if w is not None:
+                    w.close()
+                    setattr(self, name, None)
+            if hasattr(self, "bubble"):
+                self.bubble.hide()
+            self.hearts.clear()
+            import gc
+            gc.collect()
             if getattr(self, "tray", None) and self.tray.isVisible():
                 self.tray.showMessage("Mochi", "Mochi đang chạy ngầm trong khay hệ thống. Click icon để hiện lại!", QSystemTrayIcon.Information, 2500)
         else:
@@ -768,6 +785,8 @@ class Pet(QWidget):
         self.paused = on
         if on:
             self.timer.stop()
+            import gc
+            gc.collect()
         else:
             self.clock.restart()                                 # don't count the pause as one huge frame
             self.timer.start()
