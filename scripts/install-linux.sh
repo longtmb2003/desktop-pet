@@ -9,6 +9,7 @@ URL="https://github.com/longtmb2003/desktop-pet/releases/latest/download/mochi-l
 FALLBACK_URL="https://github.com/longtmb2003/desktop-pet/releases/latest/download/mochi.AppImage"
 
 echo ">>> Đang tải Mochi cho Linux từ GitHub Releases..."
+pkill -x mochi 2>/dev/null || true
 mkdir -p "$APP_DIR"
 
 if ! curl -fL -o "$BIN" "$URL" 2>/dev/null && ! curl -fL -o "$BIN" "$FALLBACK_URL" 2>/dev/null; then

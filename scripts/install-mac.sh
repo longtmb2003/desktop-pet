@@ -15,6 +15,7 @@ if ! curl -fL -o "$DMG" "$URL" 2>/dev/null; then
 fi
 
 echo ">>> Đang cài đặt vào /Applications..."
+pkill -x Mochi 2>/dev/null || true
 MOUNT_DIR=$(hdiutil attach "$DMG" -nobrowse -readonly | grep '/Volumes/' | awk '{print $3}')
 cp -R "$MOUNT_DIR/Mochi.app" /Applications/
 hdiutil detach "$MOUNT_DIR" -quiet || true
