@@ -20,19 +20,29 @@ if [ "$REBUILD" -eq 1 ]; then
     scripts/build.sh --onefile
 fi
 
-# Check for Qt6 xcb runtime dependency on Linux (libxcb-cursor0)
-if ! (ldconfig -p 2>/dev/null || /sbin/ldconfig -p 2>/dev/null) | grep -q "libxcb-cursor.so.0"; then
-    if [ ! -f /usr/lib/x86_64-linux-gnu/libxcb-cursor.so.0 ] && [ ! -f /usr/lib64/libxcb-cursor.so.0 ] && [ ! -f /usr/lib/libxcb-cursor.so.0 ]; then
-        echo ">>> [!] Thiếu thư viện hệ thống 'libxcb-cursor0' (bắt buộc cho Qt6 xcb plugin)."
-        if command -v apt-get >/dev/null 2>&1; then
-            echo ">>> Đang tự động cài đặt qua apt (có thể cần mật khẩu sudo):"
-            sudo apt-get install -y libxcb-cursor0 2>/dev/null || {
-                sudo apt-get update -qq -o Acquire::AllowInsecureRepositories=true 2>/dev/null || true
-                sudo apt-get install -y libxcb-cursor0 || {
-                    echo ">>> Vui lòng tự cài đặt bằng lệnh: sudo apt install -y libxcb-cursor0" >&2
-                }
-            }
+# Check for Qt6 xcb runtime dependency on Linux (libxcb-cursor0, libxkbcommon-x11-0)
+check_xcb() {
+    (ldconfig -p 2>/dev/null || /sbin/ldconfig -p 2>/dev/null) | grep -q "libxcb-cursor.so.0" || \
+    [ -f /usr/lib/x86_64-linux-gnu/libxcb-cursor.so.0 ] || \
+    [ -f /usr/lib64/libxcb-cursor.so.0 ] || \
+    [ -f /usr/lib/libxcb-cursor.so.0 ] || \
+    [ -f /usr/lib/aarch64-linux-gnu/libxcb-cursor.so.0 ]
+}
+
+if ! check_xcb; then
+    echo ">>> [!] Thiếu thư viện hệ thống 'libxcb-cursor0' (bắt buộc cho Qt6 xcb plugin)."
+    if command -v apt-get >/dev/null 2>&1; then
+        echo ">>> Đang tự động cài đặt qua apt (có thể cần mật khẩu sudo):"
+        if [ -c /dev/tty ]; then
+            sudo </dev/tty apt-get update -qq 2>/dev/null || true
+            sudo </dev/tty apt-get install -y libxcb-cursor0 libxkbcommon-x11-0 2>/dev/null || true
+        else
+            sudo apt-get update -qq 2>/dev/null || true
+            sudo apt-get install -y libxcb-cursor0 libxkbcommon-x11-0 2>/dev/null || true
         fi
+    fi
+    if ! check_xcb; then
+        echo ">>> Vui lòng tự cài đặt bằng lệnh: sudo apt update && sudo apt install -y libxcb-cursor0 libxkbcommon-x11-0" >&2
     fi
 fi
 
