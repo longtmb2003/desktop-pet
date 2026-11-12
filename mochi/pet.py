@@ -123,8 +123,10 @@ class Pet(QWidget):
         self.next_chat = min(self.next_chat, self.t + random.uniform(30, 90))
 
     def screen_geo(self):
-        c = QPoint(int(getattr(self, "px", 0)) + self.size // 2, int(getattr(self, "py", 0)) + self.feet)
-        r = (QGuiApplication.screenAt(c) or QGuiApplication.primaryScreen()).availableGeometry()
+        cx = int(getattr(self, "px", 0)) + self.size // 2
+        cy = int(getattr(self, "py", 0)) + self.size // 2
+        scr = QGuiApplication.screenAt(QPoint(cx, cy)) or getattr(self, "screen", lambda: None)() or QGuiApplication.primaryScreen()
+        r = scr.availableGeometry()
         return Bounds(r.left(), r.top(), r.right(), r.bottom())
 
     def ride_boost(self):
@@ -164,9 +166,15 @@ class Pet(QWidget):
             g = self.screen_geo()
             cx = self.px + self.size / 2
             floor, wid = physics.surface(self.wins, self.support, cx, self.py + self.feet, g, self.feet, self.head)
-            riding = wid is not None and wid == self.support and self.vy >= 0   # already standing on this window
-            if riding:
-                self.py = floor                                    # ride it while it moves
+            riding = (wid == self.support or (wid is None and self.support is None)) and self.vy >= 0
+            if riding or self.py >= floor - 0.5:
+                # Snap & clamp strictly to floor so pet NEVER sinks into taskbar or falls through
+                self.py = floor
+                self.support = wid
+                riding = True
+                if not self.grounded:
+                    self.grounded = True
+                    self.land()
             elif self.py < floor - 0.5 or self.vy < 0 or (self.state.motion is Motion.AIRBORNE and self.vx != 0):   # airborne
                 self.grounded = False
                 if self.support is not None and self.support not in self.wins and self.state.motion is not Motion.AIRBORNE:
@@ -180,10 +188,12 @@ class Pet(QWidget):
                 if f.impact >= IMPACT_DIZZY and self.state.motion is Motion.AIRBORNE and calm_or_scared:
                     self.enter(State(Motion.AIRBORNE, Expression.DIZZY))
                 if f.landed:
-                    self.support, self.grounded = wid, True
+                    self.support, self.grounded, riding = wid, True, True
+                    self.py = floor
                     self.land()
             else:
-                self.support, riding = wid, True
+                self.support, riding, self.grounded = wid, True, True
+                self.py = floor
                 self.land()
             if riding:                                             # on the floor or a window: free to move
                 self.grounded = True
@@ -793,7 +803,7 @@ class Pet(QWidget):
 
     def ensure_visible(self):
         """called when a screen goes away: if the pet was on it, bring it back"""
-        c = QPoint(int(self.px) + self.size // 2, int(self.py) + self.feet)
+        c = QPoint(int(self.px) + self.size // 2, int(self.py) + self.size // 2)
         if self.state.motion is not Motion.DRAG and QGuiApplication.screenAt(c) is None:
             self.bring_back()
 
